@@ -1,0 +1,4 @@
+# 已在 Python 3.13 + Streamlit 1.66 + NumPy 2.5 + pyarrow 26 上验证。
+streamlit>=1.30,<2
+numpy>=1.26,<3
+pyarrow>=16,<27
