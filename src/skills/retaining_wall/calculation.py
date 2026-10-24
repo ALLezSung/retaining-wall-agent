@@ -1,68 +1,7 @@
-"""Transparent teaching calculation for a small gravity retaining wall.
-
-This is a deliberately restricted, dry-soil Rankine model. It is not a
-complete GB 50330 design or a construction document.
-"""
-
-from __future__ import annotations
-
-from dataclasses import asdict, dataclass
-from math import isfinite, radians, sin
-
-
-@dataclass(frozen=True)
-class WallInput:
-    height_m: float
-    base_width_m: float
-    top_width_m: float
-    soil_unit_weight_kn_m3: float
-    friction_angle_deg: float
-    wall_unit_weight_kn_m3: float
-    base_friction_coefficient: float
-    surcharge_kpa: float = 0.0
-
-
-FIELD_LABELS = {
-    "height_m": "墙高 H（m）",
-    "base_width_m": "墙底宽 B（m）",
-    "top_width_m": "墙顶宽 t（m）",
-    "soil_unit_weight_kn_m3": "填土重度 γ（kN/m³）",
-    "friction_angle_deg": "填土内摩擦角 φ（°）",
-    "wall_unit_weight_kn_m3": "墙体重度 γw（kN/m³）",
-    "base_friction_coefficient": "基底摩擦系数 μ",
-    "surcharge_kpa": "均布附加荷载 q（kPa）",
-}
-
-REQUIRED_FIELDS = tuple(k for k in FIELD_LABELS if k != "surcharge_kpa")
-
-
-def validate(values: dict) -> WallInput:
-    missing = [FIELD_LABELS[k] for k in REQUIRED_FIELDS if values.get(k) is None]
-    if missing:
-        raise ValueError("还缺少：" + "、".join(missing))
-    try:
-        data = {k: float(values.get(k, 0.0)) for k in FIELD_LABELS}
-    except (TypeError, ValueError) as exc:
-        raise ValueError("参数必须是数字，且使用表中指定的单位。") from exc
-    if not all(isfinite(v) for v in data.values()):
-        raise ValueError("参数不能包含无穷大或非数值。")
-    if not 0 < data["height_m"] < 5:
-        raise ValueError("本原型仅支持 0 < 墙高 < 5 m。")
-    if not 0 < data["top_width_m"] <= data["base_width_m"]:
-        raise ValueError("必须满足 0 < 墙顶宽 ≤ 墙底宽。")
-    if not 0 < data["base_width_m"] <= 10:
-        raise ValueError("墙底宽需在 0–10 m 内。")
-    if not 0 < data["soil_unit_weight_kn_m3"] <= 35:
-        raise ValueError("填土重度需在 0–35 kN/m³ 内。")
-    if not 0 < data["wall_unit_weight_kn_m3"] <= 35:
-        raise ValueError("墙体重度需在 0–35 kN/m³ 内。")
-    if not 0 < data["friction_angle_deg"] < 60:
-        raise ValueError("内摩擦角需在 0–60° 内。")
-    if not 0 < data["base_friction_coefficient"] <= 1:
-        raise ValueError("基底摩擦系数需在 0–1 内。")
-    if not 0 <= data["surcharge_kpa"] <= 100:
-        raise ValueError("均布附加荷载需在 0–100 kPa 内。")
-    return WallInput(**data)
+"""Original deterministic teaching calculation, unchanged during migration."""
+from dataclasses import asdict
+from math import radians, sin
+from .validation import validate
 
 
 def calculate_wall(values: dict) -> dict:
@@ -180,43 +119,3 @@ def calculate_wall(values: dict) -> dict:
         ],
         "scope": "教学初算：直立墙背、水平无黏性填土、干燥、水平基底、非地震。基底压力只是静力估算，未构成地基承载力验算；不能据此作为施工设计。",
     }
-
-
-STANDARD_ENTRIES = {
-    "11.2.2": {
-        "clause": "GB 50330-2013 第 11.2.2 条",
-        "summary": "重力式挡墙设计需检查抗滑移与抗倾覆；特殊地基或坡顶位置还需检查地基稳定。",
-    },
-    "11.2.3": {
-        "clause": "GB 50330-2013 第 11.2.3 条",
-        "summary": "给出抗滑移稳定性验算；本教学原型以 1.30 作为一般工况的对照值。",
-    },
-    "11.2.4": {
-        "clause": "GB 50330-2013 第 11.2.4 条",
-        "summary": "给出抗倾覆稳定性验算；本教学原型以 1.60 作为一般工况的对照值。",
-    },
-    "11.2.6": {
-        "clause": "GB 50330-2013 第 11.2.6 条",
-        "summary": "地基承载力和墙体结构强度还需按相关标准计算，本原型暂未覆盖。",
-    },
-}
-
-
-def query_standard(keyword: str = "稳定", selected: list[str] | None = None) -> list[dict]:
-    """Return selected standard records and the reviewed GB 50330 clause index."""
-    from standards import STANDARDS
-
-    if selected is None:
-        selected = ["GB 50330-2013"]
-    if any(code not in STANDARDS for code in selected):
-        raise ValueError("规范选择无效。")
-    words = keyword.strip().lower()
-    output = []
-    if "GB 50330-2013" in selected:
-        matches = [item for item in STANDARD_ENTRIES.values() if not words or words in (item["clause"] + item["summary"]).lower()]
-        output.extend(matches or list(STANDARD_ENTRIES.values()))
-    for code in selected:
-        if code != "GB 50330-2013":
-            item = STANDARDS[code]
-            output.append({"clause": f"{code} {item['name']}", "summary": item["role"] + "；" + item["coverage"], "url": item["url"]})
-    return output

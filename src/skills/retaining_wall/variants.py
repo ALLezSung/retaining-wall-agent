@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from math import ceil
 
-from core import calculate_wall, validate
+from .calculation import calculate_wall
+from .validation import validate
 
 
 def optimize_geometry(values: dict, fixed_parameters: list[str] | None = None, step_m: float = 0.1) -> dict:

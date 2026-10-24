@@ -1,0 +1,1314 @@
+[
+  {
+    "title": "基础干燥填土",
+    "values": {
+      "height_m": 4,
+      "base_width_m": 2.4,
+      "top_width_m": 0.5,
+      "soil_unit_weight_kn_m3": 18,
+      "friction_angle_deg": 30,
+      "wall_unit_weight_kn_m3": 24,
+      "base_friction_coefficient": 0.55,
+      "surcharge_kpa": 0
+    },
+    "result": {
+      "input": {
+        "height_m": 4.0,
+        "base_width_m": 2.4,
+        "top_width_m": 0.5,
+        "soil_unit_weight_kn_m3": 18.0,
+        "friction_angle_deg": 30.0,
+        "wall_unit_weight_kn_m3": 24.0,
+        "base_friction_coefficient": 0.55,
+        "surcharge_kpa": 0.0
+      },
+      "earth_pressure_coefficient_ka": 0.3333333333333333,
+      "active_force_soil_kn_m": 48.0,
+      "active_force_surcharge_kn_m": 0.0,
+      "active_force_total_kn_m": 48.0,
+      "wall_area_m2_per_m": 5.8,
+      "wall_centroid_from_toe_m": 1.5712643678160918,
+      "wall_weight_kn_m": 139.2,
+      "sliding_resistance_kn_m": 76.56,
+      "sliding_margin_kn_m": 28.560000000000002,
+      "resisting_moment_knm_m": 218.71999999999997,
+      "overturning_moment_knm_m": 64.0,
+      "overturning_moment_soil_knm_m": 64.0,
+      "overturning_moment_surcharge_knm_m": 0.0,
+      "resultant_from_toe_m": 1.1114942528735632,
+      "eccentricity_m": 0.08850574712643677,
+      "middle_third_limit_m": 0.39999999999999997,
+      "base_contact": "全底面受压",
+      "base_contact_width_m": 2.4,
+      "base_pressure_mean_kpa": 58.0,
+      "base_pressure_max_kpa": 70.83333333333333,
+      "base_pressure_min_kpa": 45.16666666666667,
+      "calculation_steps": [
+        {
+          "name": "主动土压力系数",
+          "formula": "Ka = (1−sinφ)/(1+sinφ)",
+          "substitution": "φ=30°",
+          "value": 0.3333333333333333,
+          "unit": "—"
+        },
+        {
+          "name": "墙底填土侧压力",
+          "formula": "pγ = Ka·γ·H",
+          "substitution": "0.3333×18×4",
+          "value": 24.0,
+          "unit": "kPa"
+        },
+        {
+          "name": "附加荷载侧压力",
+          "formula": "pq = Ka·q",
+          "substitution": "0.3333×0",
+          "value": 0.0,
+          "unit": "kPa"
+        },
+        {
+          "name": "填土主动土压力合力",
+          "formula": "Eγ = 0.5·Ka·γ·H²",
+          "substitution": "0.5×0.3333×18×4²",
+          "value": 48.0,
+          "unit": "kN/m"
+        },
+        {
+          "name": "附加荷载土压力合力",
+          "formula": "Eq = Ka·q·H",
+          "substitution": "0.3333×0×4",
+          "value": 0.0,
+          "unit": "kN/m"
+        },
+        {
+          "name": "主动土压力总合力",
+          "formula": "Ea = Eγ + Eq",
+          "substitution": "48.000+0.000",
+          "value": 48.0,
+          "unit": "kN/m"
+        },
+        {
+          "name": "墙体截面积",
+          "formula": "A = H(B+t)/2",
+          "substitution": "4×(2.4+0.5)/2",
+          "value": 5.8,
+          "unit": "m²/m"
+        },
+        {
+          "name": "墙体自重",
+          "formula": "G = A·γw",
+          "substitution": "5.800×24",
+          "value": 139.2,
+          "unit": "kN/m"
+        },
+        {
+          "name": "墙体重心距墙趾",
+          "formula": "xG = B − (B²+Bt+t²)/[3(B+t)]",
+          "substitution": "2.4−(2.4²+2.4×0.5+0.5²)/[3×(2.4+0.5)]",
+          "value": 1.5712643678160918,
+          "unit": "m"
+        },
+        {
+          "name": "抗滑阻力",
+          "formula": "R = μ·G",
+          "substitution": "0.55×139.200",
+          "value": 76.56,
+          "unit": "kN/m"
+        },
+        {
+          "name": "抗滑系数",
+          "formula": "Ks = R/Ea",
+          "substitution": "76.560/48.000",
+          "value": 1.595,
+          "unit": "—"
+        },
+        {
+          "name": "抗倾覆力矩",
+          "formula": "Mr = G·xG",
+          "substitution": "139.200×1.571",
+          "value": 218.71999999999997,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "填土倾覆力矩",
+          "formula": "Mγ = Eγ·H/3",
+          "substitution": "48.000×4/3",
+          "value": 64.0,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "附加荷载倾覆力矩",
+          "formula": "Mq = Eq·H/2",
+          "substitution": "0.000×4/2",
+          "value": 0.0,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "倾覆力矩总计",
+          "formula": "Mo = Mγ + Mq",
+          "substitution": "64.000+0.000",
+          "value": 64.0,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "抗倾覆系数",
+          "formula": "Ko = Mr/Mo",
+          "substitution": "218.720/64.000",
+          "value": 3.4174999999999995,
+          "unit": "—"
+        },
+        {
+          "name": "基底合力距墙趾",
+          "formula": "xR = (Mr−Mo)/G",
+          "substitution": "(218.720−64.000)/139.200",
+          "value": 1.1114942528735632,
+          "unit": "m"
+        },
+        {
+          "name": "基底偏心距",
+          "formula": "e = B/2−xR",
+          "substitution": "2.4/2−1.111",
+          "value": 0.08850574712643677,
+          "unit": "m"
+        },
+        {
+          "name": "基底平均压力",
+          "formula": "p̄ = G/B",
+          "substitution": "139.200/2.4",
+          "value": 58.0,
+          "unit": "kPa"
+        },
+        {
+          "name": "基底接触宽度",
+          "formula": "全底面：a=B；部分受压：a=3·min(xR,B−xR)",
+          "substitution": "全底面受压",
+          "value": 2.4,
+          "unit": "m"
+        },
+        {
+          "name": "基底最大压力",
+          "formula": "全底面：G/B·(1+6|e|/B)；部分受压：2G/a",
+          "substitution": "58.000×(1+6×0.089/2.4)",
+          "value": 70.83333333333333,
+          "unit": "kPa"
+        },
+        {
+          "name": "基底最小压力",
+          "formula": "全底面：G/B·(1−6|e|/B)；部分受压：0",
+          "substitution": "58.000×(1−6×0.089/2.4)",
+          "value": 45.16666666666667,
+          "unit": "kPa"
+        }
+      ],
+      "sliding_ratio": 1.595,
+      "overturning_ratio": 3.4174999999999995,
+      "reference_sliding_min": 1.3,
+      "reference_overturning_min": 1.6,
+      "sliding_pass": true,
+      "overturning_pass": true,
+      "pending_checks": [
+        {
+          "item": "地基承载力",
+          "needed": "地基承载力特征值及地基土、基础埋深等资料；已估算基底压力，但不能判定承载力是否满足"
+        },
+        {
+          "item": "地基变形/沉降",
+          "needed": "地层分布、压缩模量或沉降试验资料及基础尺寸"
+        },
+        {
+          "item": "整体稳定",
+          "needed": "坡体剖面、地层、地下水、潜在滑面和各层抗剪参数"
+        },
+        {
+          "item": "墙身强度与构造",
+          "needed": "墙体材料强度、连接与施工构造信息"
+        },
+        {
+          "item": "地下水、地震等特殊工况",
+          "needed": "水位、排水、地震参数；本模型不适用时应换用相应方法"
+        }
+      ],
+      "scope": "教学初算：直立墙背、水平无黏性填土、干燥、水平基底、非地震。基底压力只是静力估算，未构成地基承载力验算；不能据此作为施工设计。"
+    },
+    "optimization": {
+      "fixed_parameters": [],
+      "step_m": 0.1,
+      "searched_count": 4851,
+      "recommended": {
+        "label": "方案1 · 较少墙体用量",
+        "base_width_m": 1.9,
+        "top_width_m": 0.5,
+        "wall_weight_kn_m": 115.19999999999999,
+        "weight_change_percent": -17.24137931034483,
+        "sliding_ratio": 1.32,
+        "overturning_ratio": 2.2174999999999994,
+        "base_contact": "全底面受压",
+        "base_pressure_max_kpa": 113.01939058171749,
+        "passes_teaching_screen": true
+      },
+      "alternatives": [
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 1.9,
+          "top_width_m": 0.5,
+          "wall_weight_kn_m": 115.19999999999999,
+          "weight_change_percent": -17.24137931034483,
+          "sliding_ratio": 1.32,
+          "overturning_ratio": 2.2174999999999994,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 113.01939058171749,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案2 · 较小墙底宽",
+          "base_width_m": 1.8,
+          "top_width_m": 0.7,
+          "wall_weight_kn_m": 120.0,
+          "weight_change_percent": -13.793103448275856,
+          "sliding_ratio": 1.375,
+          "overturning_ratio": 2.1275,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 133.03703703703707,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案3 · 更多稳定余量",
+          "base_width_m": 2.1,
+          "top_width_m": 0.5,
+          "wall_weight_kn_m": 124.80000000000001,
+          "weight_change_percent": -10.344827586206884,
+          "sliding_ratio": 1.4300000000000004,
+          "overturning_ratio": 2.6675000000000004,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 92.51700680272107,
+          "passes_teaching_screen": true
+        }
+      ],
+      "candidates": [
+        {
+          "label": "当前方案",
+          "base_width_m": 2.4,
+          "top_width_m": 0.5,
+          "wall_weight_kn_m": 139.2,
+          "weight_change_percent": 0.0,
+          "sliding_ratio": 1.595,
+          "overturning_ratio": 3.4174999999999995,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 70.83333333333333,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 1.9,
+          "top_width_m": 0.5,
+          "wall_weight_kn_m": 115.19999999999999,
+          "weight_change_percent": -17.24137931034483,
+          "sliding_ratio": 1.32,
+          "overturning_ratio": 2.2174999999999994,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 113.01939058171749,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案2 · 较小墙底宽",
+          "base_width_m": 1.8,
+          "top_width_m": 0.7,
+          "wall_weight_kn_m": 120.0,
+          "weight_change_percent": -13.793103448275856,
+          "sliding_ratio": 1.375,
+          "overturning_ratio": 2.1275,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 133.03703703703707,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案3 · 更多稳定余量",
+          "base_width_m": 2.1,
+          "top_width_m": 0.5,
+          "wall_weight_kn_m": 124.80000000000001,
+          "weight_change_percent": -10.344827586206884,
+          "sliding_ratio": 1.4300000000000004,
+          "overturning_ratio": 2.6675000000000004,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 92.51700680272107,
+          "passes_teaching_screen": true
+        }
+      ],
+      "reason": "找到 3 个不同的教学候选，分别侧重墙体用量、较小底宽或稳定余量；请指定想试的方案编号。",
+      "scope": "仅在现有干燥水平填土模型内试算几何尺寸；墙高、土性、荷载、墙体重度和基底摩擦系数不变。抗滑≥1.30、抗倾覆≥1.60及基底全接触只是教学筛选。墙顶宽搜索下限 0.3 m（已有更小值时保留原值），不是规范构造下限；未核算地基承载力、整体稳定、墙身强度、构造和实际造价。"
+    },
+    "fixed_base_optimization": {
+      "fixed_parameters": [
+        "base_width_m"
+      ],
+      "step_m": 0.1,
+      "searched_count": 22,
+      "recommended": {
+        "label": "方案1 · 较少墙体用量",
+        "base_width_m": 2.4,
+        "top_width_m": 0.3,
+        "wall_weight_kn_m": 129.6,
+        "weight_change_percent": -6.896551724137923,
+        "sliding_ratio": 1.485,
+        "overturning_ratio": 3.2175,
+        "base_contact": "全底面受压",
+        "base_pressure_max_kpa": 68.16666666666667,
+        "passes_teaching_screen": true
+      },
+      "alternatives": [
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 2.4,
+          "top_width_m": 0.3,
+          "wall_weight_kn_m": 129.6,
+          "weight_change_percent": -6.896551724137923,
+          "sliding_ratio": 1.485,
+          "overturning_ratio": 3.2175,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 68.16666666666667,
+          "passes_teaching_screen": true
+        }
+      ],
+      "candidates": [
+        {
+          "label": "当前方案",
+          "base_width_m": 2.4,
+          "top_width_m": 0.5,
+          "wall_weight_kn_m": 139.2,
+          "weight_change_percent": 0.0,
+          "sliding_ratio": 1.595,
+          "overturning_ratio": 3.4174999999999995,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 70.83333333333333,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 2.4,
+          "top_width_m": 0.3,
+          "wall_weight_kn_m": 129.6,
+          "weight_change_percent": -6.896551724137923,
+          "sliding_ratio": 1.485,
+          "overturning_ratio": 3.2175,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 68.16666666666667,
+          "passes_teaching_screen": true
+        }
+      ],
+      "reason": "找到 1 个不同的教学候选，分别侧重墙体用量、较小底宽或稳定余量；请指定想试的方案编号。",
+      "scope": "仅在现有干燥水平填土模型内试算几何尺寸；墙高、土性、荷载、墙体重度和基底摩擦系数不变。抗滑≥1.30、抗倾覆≥1.60及基底全接触只是教学筛选。墙顶宽搜索下限 0.3 m（已有更小值时保留原值），不是规范构造下限；未核算地基承载力、整体稳定、墙身强度、构造和实际造价。"
+    },
+    "base_comparison": {
+      "step_m": 0.1,
+      "fixed_top_width_m": 0.5,
+      "searched_to_m": 10.0,
+      "recommended_width_m": 1.9,
+      "candidates": [
+        {
+          "label": "当前方案",
+          "base_width_m": 2.4,
+          "wall_weight_kn_m": 139.2,
+          "weight_change_percent": 0.0,
+          "sliding_ratio": 1.595,
+          "overturning_ratio": 3.4174999999999995,
+          "base_pressure_max_kpa": 70.83333333333333,
+          "full_contact": true,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "最小候选宽度",
+          "base_width_m": 1.9,
+          "wall_weight_kn_m": 115.19999999999999,
+          "weight_change_percent": -17.24137931034483,
+          "sliding_ratio": 1.32,
+          "overturning_ratio": 2.2174999999999994,
+          "base_pressure_max_kpa": 113.01939058171749,
+          "full_contact": true,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "加宽 0.3 m",
+          "base_width_m": 2.2,
+          "wall_weight_kn_m": 129.60000000000002,
+          "weight_change_percent": -6.896551724137911,
+          "sliding_ratio": 1.4850000000000003,
+          "overturning_ratio": 2.907500000000001,
+          "base_pressure_max_kpa": 84.297520661157,
+          "full_contact": true,
+          "passes_teaching_screen": true
+        }
+      ],
+      "scope": "仅改变墙底宽，保持其余教学参数不变；筛选条件为抗滑≥1.30、抗倾覆≥1.60且基底全接触。未验算地基承载力、整体稳定、墙身强度与经济性。"
+    }
+  },
+  {
+    "title": "坡顶均布荷载",
+    "values": {
+      "height_m": 3.5,
+      "base_width_m": 2.3,
+      "top_width_m": 0.6,
+      "soil_unit_weight_kn_m3": 19,
+      "friction_angle_deg": 32,
+      "wall_unit_weight_kn_m3": 24,
+      "base_friction_coefficient": 0.6,
+      "surcharge_kpa": 10
+    },
+    "result": {
+      "input": {
+        "height_m": 3.5,
+        "base_width_m": 2.3,
+        "top_width_m": 0.6,
+        "soil_unit_weight_kn_m3": 19.0,
+        "friction_angle_deg": 32.0,
+        "wall_unit_weight_kn_m3": 24.0,
+        "base_friction_coefficient": 0.6,
+        "surcharge_kpa": 10.0
+      },
+      "earth_pressure_coefficient_ka": 0.3072585245224685,
+      "active_force_soil_kn_m": 35.75721079130227,
+      "active_force_surcharge_kn_m": 10.754048358286397,
+      "active_force_total_kn_m": 46.51125914958867,
+      "wall_area_m2_per_m": 5.075,
+      "wall_centroid_from_toe_m": 1.4919540229885055,
+      "wall_weight_kn_m": 121.80000000000001,
+      "sliding_resistance_kn_m": 73.08,
+      "sliding_margin_kn_m": 26.56874085041133,
+      "resisting_moment_knm_m": 181.72,
+      "overturning_moment_knm_m": 60.536330550187174,
+      "overturning_moment_soil_knm_m": 41.71674592318598,
+      "overturning_moment_surcharge_knm_m": 18.819584627001195,
+      "resultant_from_toe_m": 0.99493981485889,
+      "eccentricity_m": 0.15506018514110986,
+      "middle_third_limit_m": 0.3833333333333333,
+      "base_contact": "全底面受压",
+      "base_contact_width_m": 2.3,
+      "base_pressure_mean_kpa": 52.956521739130444,
+      "base_pressure_max_kpa": 74.37769060512726,
+      "base_pressure_min_kpa": 31.535352873133636,
+      "calculation_steps": [
+        {
+          "name": "主动土压力系数",
+          "formula": "Ka = (1−sinφ)/(1+sinφ)",
+          "substitution": "φ=32°",
+          "value": 0.3072585245224685,
+          "unit": "—"
+        },
+        {
+          "name": "墙底填土侧压力",
+          "formula": "pγ = Ka·γ·H",
+          "substitution": "0.3073×19×3.5",
+          "value": 20.432691880744155,
+          "unit": "kPa"
+        },
+        {
+          "name": "附加荷载侧压力",
+          "formula": "pq = Ka·q",
+          "substitution": "0.3073×10",
+          "value": 3.072585245224685,
+          "unit": "kPa"
+        },
+        {
+          "name": "填土主动土压力合力",
+          "formula": "Eγ = 0.5·Ka·γ·H²",
+          "substitution": "0.5×0.3073×19×3.5²",
+          "value": 35.75721079130227,
+          "unit": "kN/m"
+        },
+        {
+          "name": "附加荷载土压力合力",
+          "formula": "Eq = Ka·q·H",
+          "substitution": "0.3073×10×3.5",
+          "value": 10.754048358286397,
+          "unit": "kN/m"
+        },
+        {
+          "name": "主动土压力总合力",
+          "formula": "Ea = Eγ + Eq",
+          "substitution": "35.757+10.754",
+          "value": 46.51125914958867,
+          "unit": "kN/m"
+        },
+        {
+          "name": "墙体截面积",
+          "formula": "A = H(B+t)/2",
+          "substitution": "3.5×(2.3+0.6)/2",
+          "value": 5.075,
+          "unit": "m²/m"
+        },
+        {
+          "name": "墙体自重",
+          "formula": "G = A·γw",
+          "substitution": "5.075×24",
+          "value": 121.80000000000001,
+          "unit": "kN/m"
+        },
+        {
+          "name": "墙体重心距墙趾",
+          "formula": "xG = B − (B²+Bt+t²)/[3(B+t)]",
+          "substitution": "2.3−(2.3²+2.3×0.6+0.6²)/[3×(2.3+0.6)]",
+          "value": 1.4919540229885055,
+          "unit": "m"
+        },
+        {
+          "name": "抗滑阻力",
+          "formula": "R = μ·G",
+          "substitution": "0.6×121.800",
+          "value": 73.08,
+          "unit": "kN/m"
+        },
+        {
+          "name": "抗滑系数",
+          "formula": "Ks = R/Ea",
+          "substitution": "73.080/46.511",
+          "value": 1.5712324571769047,
+          "unit": "—"
+        },
+        {
+          "name": "抗倾覆力矩",
+          "formula": "Mr = G·xG",
+          "substitution": "121.800×1.492",
+          "value": 181.72,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "填土倾覆力矩",
+          "formula": "Mγ = Eγ·H/3",
+          "substitution": "35.757×3.5/3",
+          "value": 41.71674592318598,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "附加荷载倾覆力矩",
+          "formula": "Mq = Eq·H/2",
+          "substitution": "10.754×3.5/2",
+          "value": 18.819584627001195,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "倾覆力矩总计",
+          "formula": "Mo = Mγ + Mq",
+          "substitution": "41.717+18.820",
+          "value": 60.536330550187174,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "抗倾覆系数",
+          "formula": "Ko = Mr/Mo",
+          "substitution": "181.720/60.536",
+          "value": 3.001833747576531,
+          "unit": "—"
+        },
+        {
+          "name": "基底合力距墙趾",
+          "formula": "xR = (Mr−Mo)/G",
+          "substitution": "(181.720−60.536)/121.800",
+          "value": 0.99493981485889,
+          "unit": "m"
+        },
+        {
+          "name": "基底偏心距",
+          "formula": "e = B/2−xR",
+          "substitution": "2.3/2−0.995",
+          "value": 0.15506018514110986,
+          "unit": "m"
+        },
+        {
+          "name": "基底平均压力",
+          "formula": "p̄ = G/B",
+          "substitution": "121.800/2.3",
+          "value": 52.956521739130444,
+          "unit": "kPa"
+        },
+        {
+          "name": "基底接触宽度",
+          "formula": "全底面：a=B；部分受压：a=3·min(xR,B−xR)",
+          "substitution": "全底面受压",
+          "value": 2.3,
+          "unit": "m"
+        },
+        {
+          "name": "基底最大压力",
+          "formula": "全底面：G/B·(1+6|e|/B)；部分受压：2G/a",
+          "substitution": "52.957×(1+6×0.155/2.3)",
+          "value": 74.37769060512726,
+          "unit": "kPa"
+        },
+        {
+          "name": "基底最小压力",
+          "formula": "全底面：G/B·(1−6|e|/B)；部分受压：0",
+          "substitution": "52.957×(1−6×0.155/2.3)",
+          "value": 31.535352873133636,
+          "unit": "kPa"
+        }
+      ],
+      "sliding_ratio": 1.5712324571769047,
+      "overturning_ratio": 3.001833747576531,
+      "reference_sliding_min": 1.3,
+      "reference_overturning_min": 1.6,
+      "sliding_pass": true,
+      "overturning_pass": true,
+      "pending_checks": [
+        {
+          "item": "地基承载力",
+          "needed": "地基承载力特征值及地基土、基础埋深等资料；已估算基底压力，但不能判定承载力是否满足"
+        },
+        {
+          "item": "地基变形/沉降",
+          "needed": "地层分布、压缩模量或沉降试验资料及基础尺寸"
+        },
+        {
+          "item": "整体稳定",
+          "needed": "坡体剖面、地层、地下水、潜在滑面和各层抗剪参数"
+        },
+        {
+          "item": "墙身强度与构造",
+          "needed": "墙体材料强度、连接与施工构造信息"
+        },
+        {
+          "item": "地下水、地震等特殊工况",
+          "needed": "水位、排水、地震参数；本模型不适用时应换用相应方法"
+        }
+      ],
+      "scope": "教学初算：直立墙背、水平无黏性填土、干燥、水平基底、非地震。基底压力只是静力估算，未构成地基承载力验算；不能据此作为施工设计。"
+    },
+    "optimization": {
+      "fixed_parameters": [],
+      "step_m": 0.1,
+      "searched_count": 4851,
+      "recommended": {
+        "label": "方案1 · 较少墙体用量",
+        "base_width_m": 2.0,
+        "top_width_m": 0.4,
+        "wall_weight_kn_m": 100.80000000000001,
+        "weight_change_percent": -17.24137931034483,
+        "sliding_ratio": 1.3003303093877834,
+        "overturning_ratio": 2.1831518164192953,
+        "base_contact": "全底面受压",
+        "base_pressure_max_kpa": 94.16449582528078,
+        "passes_teaching_screen": true
+      },
+      "alternatives": [
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 2.0,
+          "top_width_m": 0.4,
+          "wall_weight_kn_m": 100.80000000000001,
+          "weight_change_percent": -17.24137931034483,
+          "sliding_ratio": 1.3003303093877834,
+          "overturning_ratio": 2.1831518164192953,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 94.16449582528078,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案2 · 较小墙底宽",
+          "base_width_m": 1.9,
+          "top_width_m": 0.6,
+          "wall_weight_kn_m": 105.0,
+          "weight_change_percent": -13.793103448275868,
+          "sliding_ratio": 1.3545107389456077,
+          "overturning_ratio": 2.113771991744953,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 108.99113110834432,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案3 · 更多稳定余量",
+          "base_width_m": 2.2,
+          "top_width_m": 0.4,
+          "wall_weight_kn_m": 109.19999999999999,
+          "weight_change_percent": -10.344827586206918,
+          "sliding_ratio": 1.4086911685034318,
+          "overturning_ratio": 2.6086814077552596,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 77.82189737626506,
+          "passes_teaching_screen": true
+        }
+      ],
+      "candidates": [
+        {
+          "label": "当前方案",
+          "base_width_m": 2.3,
+          "top_width_m": 0.6,
+          "wall_weight_kn_m": 121.80000000000001,
+          "weight_change_percent": 0.0,
+          "sliding_ratio": 1.5712324571769047,
+          "overturning_ratio": 3.001833747576531,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 74.37769060512726,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 2.0,
+          "top_width_m": 0.4,
+          "wall_weight_kn_m": 100.80000000000001,
+          "weight_change_percent": -17.24137931034483,
+          "sliding_ratio": 1.3003303093877834,
+          "overturning_ratio": 2.1831518164192953,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 94.16449582528078,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案2 · 较小墙底宽",
+          "base_width_m": 1.9,
+          "top_width_m": 0.6,
+          "wall_weight_kn_m": 105.0,
+          "weight_change_percent": -13.793103448275868,
+          "sliding_ratio": 1.3545107389456077,
+          "overturning_ratio": 2.113771991744953,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 108.99113110834432,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案3 · 更多稳定余量",
+          "base_width_m": 2.2,
+          "top_width_m": 0.4,
+          "wall_weight_kn_m": 109.19999999999999,
+          "weight_change_percent": -10.344827586206918,
+          "sliding_ratio": 1.4086911685034318,
+          "overturning_ratio": 2.6086814077552596,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 77.82189737626506,
+          "passes_teaching_screen": true
+        }
+      ],
+      "reason": "找到 3 个不同的教学候选，分别侧重墙体用量、较小底宽或稳定余量；请指定想试的方案编号。",
+      "scope": "仅在现有干燥水平填土模型内试算几何尺寸；墙高、土性、荷载、墙体重度和基底摩擦系数不变。抗滑≥1.30、抗倾覆≥1.60及基底全接触只是教学筛选。墙顶宽搜索下限 0.3 m（已有更小值时保留原值），不是规范构造下限；未核算地基承载力、整体稳定、墙身强度、构造和实际造价。"
+    },
+    "fixed_base_optimization": {
+      "fixed_parameters": [
+        "base_width_m"
+      ],
+      "step_m": 0.1,
+      "searched_count": 21,
+      "recommended": {
+        "label": "方案1 · 较少墙体用量",
+        "base_width_m": 2.3,
+        "top_width_m": 0.3,
+        "wall_weight_kn_m": 109.19999999999997,
+        "weight_change_percent": -10.344827586206929,
+        "sliding_ratio": 1.4086911685034316,
+        "overturning_ratio": 2.7451283962814648,
+        "base_contact": "全底面受压",
+        "base_pressure_max_kpa": 70.09035601155445,
+        "passes_teaching_screen": true
+      },
+      "alternatives": [
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 2.3,
+          "top_width_m": 0.3,
+          "wall_weight_kn_m": 109.19999999999997,
+          "weight_change_percent": -10.344827586206929,
+          "sliding_ratio": 1.4086911685034316,
+          "overturning_ratio": 2.7451283962814648,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 70.09035601155445,
+          "passes_teaching_screen": true
+        }
+      ],
+      "candidates": [
+        {
+          "label": "当前方案",
+          "base_width_m": 2.3,
+          "top_width_m": 0.6,
+          "wall_weight_kn_m": 121.80000000000001,
+          "weight_change_percent": 0.0,
+          "sliding_ratio": 1.5712324571769047,
+          "overturning_ratio": 3.001833747576531,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 74.37769060512726,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 2.3,
+          "top_width_m": 0.3,
+          "wall_weight_kn_m": 109.19999999999997,
+          "weight_change_percent": -10.344827586206929,
+          "sliding_ratio": 1.4086911685034316,
+          "overturning_ratio": 2.7451283962814648,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 70.09035601155445,
+          "passes_teaching_screen": true
+        }
+      ],
+      "reason": "找到 1 个不同的教学候选，分别侧重墙体用量、较小底宽或稳定余量；请指定想试的方案编号。",
+      "scope": "仅在现有干燥水平填土模型内试算几何尺寸；墙高、土性、荷载、墙体重度和基底摩擦系数不变。抗滑≥1.30、抗倾覆≥1.60及基底全接触只是教学筛选。墙顶宽搜索下限 0.3 m（已有更小值时保留原值），不是规范构造下限；未核算地基承载力、整体稳定、墙身强度、构造和实际造价。"
+    },
+    "base_comparison": {
+      "step_m": 0.1,
+      "fixed_top_width_m": 0.6,
+      "searched_to_m": 10.0,
+      "recommended_width_m": 1.9,
+      "candidates": [
+        {
+          "label": "当前方案",
+          "base_width_m": 2.3,
+          "wall_weight_kn_m": 121.80000000000001,
+          "weight_change_percent": 0.0,
+          "sliding_ratio": 1.5712324571769047,
+          "overturning_ratio": 3.001833747576531,
+          "base_pressure_max_kpa": 74.37769060512726,
+          "full_contact": true,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "最小候选宽度",
+          "base_width_m": 1.9,
+          "wall_weight_kn_m": 105.0,
+          "weight_change_percent": -13.793103448275868,
+          "sliding_ratio": 1.3545107389456077,
+          "overturning_ratio": 2.113771991744953,
+          "base_pressure_max_kpa": 108.99113110834432,
+          "full_contact": true,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "加宽 0.3 m",
+          "base_width_m": 2.2,
+          "wall_weight_kn_m": 117.60000000000001,
+          "weight_change_percent": -3.4482758620689724,
+          "sliding_ratio": 1.5170520276190806,
+          "overturning_ratio": 2.7659423436837685,
+          "base_pressure_max_kpa": 81.29297175643038,
+          "full_contact": true,
+          "passes_teaching_screen": true
+        }
+      ],
+      "scope": "仅改变墙底宽，保持其余教学参数不变；筛选条件为抗滑≥1.30、抗倾覆≥1.60且基底全接触。未验算地基承载力、整体稳定、墙身强度与经济性。"
+    }
+  },
+  {
+    "title": "矩形墙对照",
+    "values": {
+      "height_m": 3,
+      "base_width_m": 1.8,
+      "top_width_m": 1.8,
+      "soil_unit_weight_kn_m3": 17.5,
+      "friction_angle_deg": 28,
+      "wall_unit_weight_kn_m3": 24,
+      "base_friction_coefficient": 0.58,
+      "surcharge_kpa": 0
+    },
+    "result": {
+      "input": {
+        "height_m": 3.0,
+        "base_width_m": 1.8,
+        "top_width_m": 1.8,
+        "soil_unit_weight_kn_m3": 17.5,
+        "friction_angle_deg": 28.0,
+        "wall_unit_weight_kn_m3": 24.0,
+        "base_friction_coefficient": 0.58,
+        "surcharge_kpa": 0.0
+      },
+      "earth_pressure_coefficient_ka": 0.3610334834981831,
+      "active_force_soil_kn_m": 28.43138682548192,
+      "active_force_surcharge_kn_m": 0.0,
+      "active_force_total_kn_m": 28.43138682548192,
+      "wall_area_m2_per_m": 5.4,
+      "wall_centroid_from_toe_m": 0.9,
+      "wall_weight_kn_m": 129.60000000000002,
+      "sliding_resistance_kn_m": 75.168,
+      "sliding_margin_kn_m": 46.736613174518084,
+      "resisting_moment_knm_m": 116.64000000000003,
+      "overturning_moment_knm_m": 28.43138682548192,
+      "overturning_moment_soil_knm_m": 28.43138682548192,
+      "overturning_moment_surcharge_knm_m": 0.0,
+      "resultant_from_toe_m": 0.680622015235479,
+      "eccentricity_m": 0.21937798476452097,
+      "middle_third_limit_m": 0.3,
+      "base_contact": "全底面受压",
+      "base_contact_width_m": 1.8,
+      "base_pressure_mean_kpa": 72.00000000000001,
+      "base_pressure_max_kpa": 124.65071634348504,
+      "base_pressure_min_kpa": 19.349283656514974,
+      "calculation_steps": [
+        {
+          "name": "主动土压力系数",
+          "formula": "Ka = (1−sinφ)/(1+sinφ)",
+          "substitution": "φ=28°",
+          "value": 0.3610334834981831,
+          "unit": "—"
+        },
+        {
+          "name": "墙底填土侧压力",
+          "formula": "pγ = Ka·γ·H",
+          "substitution": "0.3610×17.5×3",
+          "value": 18.954257883654613,
+          "unit": "kPa"
+        },
+        {
+          "name": "附加荷载侧压力",
+          "formula": "pq = Ka·q",
+          "substitution": "0.3610×0",
+          "value": 0.0,
+          "unit": "kPa"
+        },
+        {
+          "name": "填土主动土压力合力",
+          "formula": "Eγ = 0.5·Ka·γ·H²",
+          "substitution": "0.5×0.3610×17.5×3²",
+          "value": 28.43138682548192,
+          "unit": "kN/m"
+        },
+        {
+          "name": "附加荷载土压力合力",
+          "formula": "Eq = Ka·q·H",
+          "substitution": "0.3610×0×3",
+          "value": 0.0,
+          "unit": "kN/m"
+        },
+        {
+          "name": "主动土压力总合力",
+          "formula": "Ea = Eγ + Eq",
+          "substitution": "28.431+0.000",
+          "value": 28.43138682548192,
+          "unit": "kN/m"
+        },
+        {
+          "name": "墙体截面积",
+          "formula": "A = H(B+t)/2",
+          "substitution": "3×(1.8+1.8)/2",
+          "value": 5.4,
+          "unit": "m²/m"
+        },
+        {
+          "name": "墙体自重",
+          "formula": "G = A·γw",
+          "substitution": "5.400×24",
+          "value": 129.60000000000002,
+          "unit": "kN/m"
+        },
+        {
+          "name": "墙体重心距墙趾",
+          "formula": "xG = B − (B²+Bt+t²)/[3(B+t)]",
+          "substitution": "1.8−(1.8²+1.8×1.8+1.8²)/[3×(1.8+1.8)]",
+          "value": 0.9,
+          "unit": "m"
+        },
+        {
+          "name": "抗滑阻力",
+          "formula": "R = μ·G",
+          "substitution": "0.58×129.600",
+          "value": 75.168,
+          "unit": "kN/m"
+        },
+        {
+          "name": "抗滑系数",
+          "formula": "Ks = R/Ea",
+          "substitution": "75.168/28.431",
+          "value": 2.643838672429089,
+          "unit": "—"
+        },
+        {
+          "name": "抗倾覆力矩",
+          "formula": "Mr = G·xG",
+          "substitution": "129.600×0.900",
+          "value": 116.64000000000003,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "填土倾覆力矩",
+          "formula": "Mγ = Eγ·H/3",
+          "substitution": "28.431×3/3",
+          "value": 28.43138682548192,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "附加荷载倾覆力矩",
+          "formula": "Mq = Eq·H/2",
+          "substitution": "0.000×3/2",
+          "value": 0.0,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "倾覆力矩总计",
+          "formula": "Mo = Mγ + Mq",
+          "substitution": "28.431+0.000",
+          "value": 28.43138682548192,
+          "unit": "kN·m/m"
+        },
+        {
+          "name": "抗倾覆系数",
+          "formula": "Ko = Mr/Mo",
+          "substitution": "116.640/28.431",
+          "value": 4.1025082848037595,
+          "unit": "—"
+        },
+        {
+          "name": "基底合力距墙趾",
+          "formula": "xR = (Mr−Mo)/G",
+          "substitution": "(116.640−28.431)/129.600",
+          "value": 0.680622015235479,
+          "unit": "m"
+        },
+        {
+          "name": "基底偏心距",
+          "formula": "e = B/2−xR",
+          "substitution": "1.8/2−0.681",
+          "value": 0.21937798476452097,
+          "unit": "m"
+        },
+        {
+          "name": "基底平均压力",
+          "formula": "p̄ = G/B",
+          "substitution": "129.600/1.8",
+          "value": 72.00000000000001,
+          "unit": "kPa"
+        },
+        {
+          "name": "基底接触宽度",
+          "formula": "全底面：a=B；部分受压：a=3·min(xR,B−xR)",
+          "substitution": "全底面受压",
+          "value": 1.8,
+          "unit": "m"
+        },
+        {
+          "name": "基底最大压力",
+          "formula": "全底面：G/B·(1+6|e|/B)；部分受压：2G/a",
+          "substitution": "72.000×(1+6×0.219/1.8)",
+          "value": 124.65071634348504,
+          "unit": "kPa"
+        },
+        {
+          "name": "基底最小压力",
+          "formula": "全底面：G/B·(1−6|e|/B)；部分受压：0",
+          "substitution": "72.000×(1−6×0.219/1.8)",
+          "value": 19.349283656514974,
+          "unit": "kPa"
+        }
+      ],
+      "sliding_ratio": 2.643838672429089,
+      "overturning_ratio": 4.1025082848037595,
+      "reference_sliding_min": 1.3,
+      "reference_overturning_min": 1.6,
+      "sliding_pass": true,
+      "overturning_pass": true,
+      "pending_checks": [
+        {
+          "item": "地基承载力",
+          "needed": "地基承载力特征值及地基土、基础埋深等资料；已估算基底压力，但不能判定承载力是否满足"
+        },
+        {
+          "item": "地基变形/沉降",
+          "needed": "地层分布、压缩模量或沉降试验资料及基础尺寸"
+        },
+        {
+          "item": "整体稳定",
+          "needed": "坡体剖面、地层、地下水、潜在滑面和各层抗剪参数"
+        },
+        {
+          "item": "墙身强度与构造",
+          "needed": "墙体材料强度、连接与施工构造信息"
+        },
+        {
+          "item": "地下水、地震等特殊工况",
+          "needed": "水位、排水、地震参数；本模型不适用时应换用相应方法"
+        }
+      ],
+      "scope": "教学初算：直立墙背、水平无黏性填土、干燥、水平基底、非地震。基底压力只是静力估算，未构成地基承载力验算；不能据此作为施工设计。"
+    },
+    "optimization": {
+      "fixed_parameters": [],
+      "step_m": 0.1,
+      "searched_count": 4851,
+      "recommended": {
+        "label": "方案1 · 较少墙体用量",
+        "base_width_m": 1.5,
+        "top_width_m": 0.3,
+        "wall_weight_kn_m": 64.80000000000001,
+        "weight_change_percent": -50.0,
+        "sliding_ratio": 1.3219193362145445,
+        "overturning_ratio": 2.241185081513165,
+        "base_contact": "全底面受压",
+        "base_pressure_max_kpa": 78.69703153461846,
+        "passes_teaching_screen": true
+      },
+      "alternatives": [
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 1.5,
+          "top_width_m": 0.3,
+          "wall_weight_kn_m": 64.80000000000001,
+          "weight_change_percent": -50.0,
+          "sliding_ratio": 1.3219193362145445,
+          "overturning_ratio": 2.241185081513165,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 78.69703153461846,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案2 · 较小墙底宽",
+          "base_width_m": 1.4,
+          "top_width_m": 0.5,
+          "wall_weight_kn_m": 68.39999999999999,
+          "weight_change_percent": -47.22222222222224,
+          "sliding_ratio": 1.3953592993375743,
+          "overturning_ratio": 2.1398885806538117,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 96.21853109841405,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案3 · 更多稳定余量",
+          "base_width_m": 1.7,
+          "top_width_m": 0.3,
+          "wall_weight_kn_m": 72.0,
+          "weight_change_percent": -44.44444444444445,
+          "sliding_ratio": 1.4687992624606048,
+          "overturning_ratio": 2.8320813365260515,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 61.26931520861296,
+          "passes_teaching_screen": true
+        }
+      ],
+      "candidates": [
+        {
+          "label": "当前方案",
+          "base_width_m": 1.8,
+          "top_width_m": 1.8,
+          "wall_weight_kn_m": 129.60000000000002,
+          "weight_change_percent": 0.0,
+          "sliding_ratio": 2.643838672429089,
+          "overturning_ratio": 4.1025082848037595,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 124.65071634348504,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 1.5,
+          "top_width_m": 0.3,
+          "wall_weight_kn_m": 64.80000000000001,
+          "weight_change_percent": -50.0,
+          "sliding_ratio": 1.3219193362145445,
+          "overturning_ratio": 2.241185081513165,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 78.69703153461846,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案2 · 较小墙底宽",
+          "base_width_m": 1.4,
+          "top_width_m": 0.5,
+          "wall_weight_kn_m": 68.39999999999999,
+          "weight_change_percent": -47.22222222222224,
+          "sliding_ratio": 1.3953592993375743,
+          "overturning_ratio": 2.1398885806538117,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 96.21853109841405,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案3 · 更多稳定余量",
+          "base_width_m": 1.7,
+          "top_width_m": 0.3,
+          "wall_weight_kn_m": 72.0,
+          "weight_change_percent": -44.44444444444445,
+          "sliding_ratio": 1.4687992624606048,
+          "overturning_ratio": 2.8320813365260515,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 61.26931520861296,
+          "passes_teaching_screen": true
+        }
+      ],
+      "reason": "找到 3 个不同的教学候选，分别侧重墙体用量、较小底宽或稳定余量；请指定想试的方案编号。",
+      "scope": "仅在现有干燥水平填土模型内试算几何尺寸；墙高、土性、荷载、墙体重度和基底摩擦系数不变。抗滑≥1.30、抗倾覆≥1.60及基底全接触只是教学筛选。墙顶宽搜索下限 0.3 m（已有更小值时保留原值），不是规范构造下限；未核算地基承载力、整体稳定、墙身强度、构造和实际造价。"
+    },
+    "fixed_base_optimization": {
+      "fixed_parameters": [
+        "base_width_m"
+      ],
+      "step_m": 0.1,
+      "searched_count": 16,
+      "recommended": {
+        "label": "方案1 · 较少墙体用量",
+        "base_width_m": 1.8,
+        "top_width_m": 0.3,
+        "wall_weight_kn_m": 75.60000000000001,
+        "weight_change_percent": -41.66666666666667,
+        "sliding_ratio": 1.542239225583635,
+        "overturning_ratio": 3.152853589247334,
+        "base_contact": "全底面受压",
+        "base_pressure_max_kpa": 54.650716343485016,
+        "passes_teaching_screen": true
+      },
+      "alternatives": [
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 1.8,
+          "top_width_m": 0.3,
+          "wall_weight_kn_m": 75.60000000000001,
+          "weight_change_percent": -41.66666666666667,
+          "sliding_ratio": 1.542239225583635,
+          "overturning_ratio": 3.152853589247334,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 54.650716343485016,
+          "passes_teaching_screen": true
+        }
+      ],
+      "candidates": [
+        {
+          "label": "当前方案",
+          "base_width_m": 1.8,
+          "top_width_m": 1.8,
+          "wall_weight_kn_m": 129.60000000000002,
+          "weight_change_percent": 0.0,
+          "sliding_ratio": 2.643838672429089,
+          "overturning_ratio": 4.1025082848037595,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 124.65071634348504,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "方案1 · 较少墙体用量",
+          "base_width_m": 1.8,
+          "top_width_m": 0.3,
+          "wall_weight_kn_m": 75.60000000000001,
+          "weight_change_percent": -41.66666666666667,
+          "sliding_ratio": 1.542239225583635,
+          "overturning_ratio": 3.152853589247334,
+          "base_contact": "全底面受压",
+          "base_pressure_max_kpa": 54.650716343485016,
+          "passes_teaching_screen": true
+        }
+      ],
+      "reason": "找到 1 个不同的教学候选，分别侧重墙体用量、较小底宽或稳定余量；请指定想试的方案编号。",
+      "scope": "仅在现有干燥水平填土模型内试算几何尺寸；墙高、土性、荷载、墙体重度和基底摩擦系数不变。抗滑≥1.30、抗倾覆≥1.60及基底全接触只是教学筛选。墙顶宽搜索下限 0.3 m（已有更小值时保留原值），不是规范构造下限；未核算地基承载力、整体稳定、墙身强度、构造和实际造价。"
+    },
+    "base_comparison": {
+      "step_m": 0.1,
+      "fixed_top_width_m": 1.8,
+      "searched_to_m": 10.0,
+      "recommended_width_m": 1.8,
+      "candidates": [
+        {
+          "label": "当前方案",
+          "base_width_m": 1.8,
+          "wall_weight_kn_m": 129.60000000000002,
+          "weight_change_percent": 0.0,
+          "sliding_ratio": 2.643838672429089,
+          "overturning_ratio": 4.1025082848037595,
+          "base_pressure_max_kpa": 124.65071634348504,
+          "full_contact": true,
+          "passes_teaching_screen": true
+        },
+        {
+          "label": "加宽 0.3 m",
+          "base_width_m": 2.1,
+          "wall_weight_kn_m": 140.4,
+          "weight_change_percent": 8.333333333333325,
+          "sliding_ratio": 2.8641585617981797,
+          "overturning_ratio": 5.545983422049526,
+          "base_pressure_max_kpa": 91.58011812990738,
+          "full_contact": true,
+          "passes_teaching_screen": true
+        }
+      ],
+      "scope": "仅改变墙底宽，保持其余教学参数不变；筛选条件为抗滑≥1.30、抗倾覆≥1.60且基底全接触。未验算地基承载力、整体稳定、墙身强度与经济性。"
+    }
+  }
+]

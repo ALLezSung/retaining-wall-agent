@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core import FIELD_LABELS
+from .models import FIELD_LABELS
 
 
 def summary_markdown(result: dict) -> str:
