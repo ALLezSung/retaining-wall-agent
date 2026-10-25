@@ -28,11 +28,15 @@ def selected_standard_report(selected: list[str], result: dict | None = None) ->
         if code not in STANDARDS:
             raise ValueError(f"未知规范：{code}")
         item = {"code": code, **STANDARDS[code]}
+        item["status"] = "待补充资料与验算"
+        item["requirements"] = (["抗滑移稳定性", "抗倾覆稳定性", "地基承载力与墙体强度"]
+                                if code == "GB 50330-2013" else ["地基承载力", "地基变形与稳定"])
         if code == "GB 50330-2013" and result is not None:
             item["checks"] = [
                 {"item": "抗滑", "value": result["sliding_ratio"], "teaching_reference": 1.3, "passed": result["sliding_pass"]},
                 {"item": "抗倾覆", "value": result["overturning_ratio"], "teaching_reference": 1.6, "passed": result["overturning_pass"]},
             ]
+            item["status"] = "已有教学校核，其他项目待验算" if all(check["passed"] for check in item["checks"]) else "已有校核未达到教学对照要求"
         report.append(item)
     return report
 

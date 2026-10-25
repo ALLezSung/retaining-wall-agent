@@ -59,7 +59,12 @@ cases_database = "data/configured.sqlite3"
 
     def test_missing_file_and_example_use_defaults(self):
         self.assertEqual(ProjectConfig.load(self.path, environ={}), ProjectConfig())
-        self.assertEqual(ProjectConfig.load(PROJECT_DIR / "config.example.toml", environ={}), ProjectConfig())
+        # The example may recommend a larger token budget than the compatibility
+        # default; its explicit settings still must parse and validate normally.
+        example = ProjectConfig.load(PROJECT_DIR / "config.example.toml", environ={})
+        self.assertGreaterEqual(example.llm.max_tokens, ProjectConfig().llm.max_tokens)
+        self.assertEqual(example.llm.base_url, ProjectConfig().llm.base_url)
+        self.assertEqual(example.storage, ProjectConfig().storage)
 
     def test_invalid_configuration_is_rejected_without_echoing_values(self):
         for text in [
@@ -90,6 +95,29 @@ cases_database = "data/configured.sqlite3"
         self.assertEqual(ProjectConfig.load(self.path, environ=env).llm.base_url, "https://example.invalid/v1")
         env["DEEPSEEK_BASE_URL"] = "https://new.invalid"
         self.assertEqual(ProjectConfig.load(self.path, environ=env).llm.base_url, "https://new.invalid")
+
+    def test_generic_environment_and_reasoning_override_configuration(self):
+        self.write('''[llm]
+api_key="file"
+[llm.reasoning_overrides."custom"]
+low="minimal"
+high="max"
+[storage]
+conversations_database="data/chats.sqlite3"
+''')
+        config = ProjectConfig.load(self.path, environ={"LLM_API_KEY": "generic", "DEEPSEEK_API_KEY": "legacy",
+            "LLM_BASE_URL": "https://gateway.invalid/v1", "DEEPSEEK_ENDPOINT": "invalid-ignored",
+            "LLM_REASONING_EFFORT": "high"})
+        self.assertEqual(config.llm.api_key, "generic")
+        self.assertEqual(config.llm.base_url, "https://gateway.invalid/v1")
+        self.assertEqual(config.llm.reasoning_effort, "high")
+        self.assertEqual(config.llm.reasoning_overrides["custom"]["high"], "max")
+        self.assertEqual(config.storage.conversations_database, PROJECT_DIR / "data/chats.sqlite3")
+        for invalid in ['[llm]\nreasoning_effort="bad"', '[llm]\nreasoning_overrides=1',
+                        '[llm.reasoning_overrides."custom"]\nhigh=7']:
+            self.write(invalid)
+            with self.assertRaises(ConfigError):
+                ProjectConfig.load(self.path, environ={})
 
 
 if __name__ == "__main__":

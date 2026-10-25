@@ -298,7 +298,11 @@ class GenericLoopTests(unittest.TestCase):
                     loop.run("test")
                 self.assertEqual(events[-1].name, "run_failed")
             else:
-                self.assertEqual(loop.run("test").content, "Done")
+                outcome = loop.run("test")
+                self.assertTrue(outcome.content.startswith("Done"))
+                self.assertEqual(outcome.stop_reason, "round_limit")
+                self.assertIn("run_stopped", [event.name for event in events])
+                self.assertNotIn("run_finished", [event.name for event in events])
                 self.assertEqual(fake.requests[-1][1], [])
 
 

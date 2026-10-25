@@ -16,6 +16,7 @@ except ModuleNotFoundError:  # Python 3.10
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_DATABASE = PROJECT_DIR / "data" / "cases.sqlite3"
+DEFAULT_CONVERSATIONS_DATABASE = PROJECT_DIR / "data" / "conversations.sqlite3"
 
 
 class ConfigError(ValueError):
@@ -29,6 +30,8 @@ class ModelConfig:
     base_url: str = "https://api.deepseek.com"
     timeout_seconds: float = 45
     max_tokens: int = 1200
+    reasoning_effort: str = "default"
+    reasoning_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,7 @@ class AgentConfig:
 @dataclass(frozen=True)
 class StorageConfig:
     cases_database: Path = DEFAULT_DATABASE
+    conversations_database: Path = DEFAULT_CONVERSATIONS_DATABASE
 
 
 def _text(value, name: str, *, allow_empty: bool = False) -> str:
@@ -103,8 +107,9 @@ class ProjectConfig:
         except OSError:
             raise ConfigError("无法读取 config.toml，请检查文件权限。") from None
 
-        allowed = {"llm": {"api_key", "model", "base_url", "timeout_seconds", "max_tokens"},
-                   "agent": {"max_rounds"}, "storage": {"cases_database"}}
+        allowed = {"llm": {"api_key", "model", "base_url", "timeout_seconds", "max_tokens",
+                           "reasoning_effort", "reasoning_overrides"},
+                   "agent": {"max_rounds"}, "storage": {"cases_database", "conversations_database"}}
         for section, values in document.items():
             if section not in allowed or not isinstance(values, dict):
                 raise ConfigError("config.toml 包含未知配置分组或分组格式不正确。")
@@ -114,18 +119,36 @@ class ProjectConfig:
         def setting(section: str, name: str, env_name: str, default):
             return env.get(env_name, "").strip() or document.get(section, {}).get(name, default)
 
-        base = setting("llm", "base_url", "DEEPSEEK_BASE_URL", ModelConfig.base_url)
-        if not env.get("DEEPSEEK_BASE_URL", "").strip() and env.get("DEEPSEEK_ENDPOINT", "").strip():
+        def model_setting(name, legacy, default):
+            return env.get("LLM_" + name.upper(), "").strip() or setting("llm", name, legacy, default)
+
+        base = model_setting("base_url", "DEEPSEEK_BASE_URL", ModelConfig.base_url)
+        if not (env.get("LLM_BASE_URL", "").strip() or env.get("DEEPSEEK_BASE_URL", "").strip()) and env.get("DEEPSEEK_ENDPOINT", "").strip():
             base = base_url_from_endpoint(env["DEEPSEEK_ENDPOINT"])
+        effort = _text(model_setting("reasoning_effort", "DEEPSEEK_REASONING_EFFORT", "default"), "llm.reasoning_effort")
+        if effort not in {"default", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}:
+            raise ConfigError("配置 llm.reasoning_effort 不受支持。")
+        overrides = document.get("llm", {}).get("reasoning_overrides", {})
+        if not isinstance(overrides, dict) or any(
+            not isinstance(mapping, dict) or not mapping or any(
+                key not in {"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
+                or not isinstance(value, str) or not value.strip() for key, value in mapping.items())
+            for mapping in overrides.values()
+        ):
+            raise ConfigError("配置 llm.reasoning_overrides 应为模型名到思考深度映射的表。")
         llm = ModelConfig(
-            api_key=_text(setting("llm", "api_key", "DEEPSEEK_API_KEY", ""), "llm.api_key", allow_empty=True),
-            model=_text(setting("llm", "model", "DEEPSEEK_MODEL", ModelConfig.model), "llm.model"),
+            api_key=_text(model_setting("api_key", "DEEPSEEK_API_KEY", ""), "llm.api_key", allow_empty=True),
+            model=_text(model_setting("model", "DEEPSEEK_MODEL", ModelConfig.model), "llm.model"),
             base_url=_base_url(base),
-            timeout_seconds=_positive_number(setting("llm", "timeout_seconds", "DEEPSEEK_TIMEOUT_SECONDS", 45), "llm.timeout_seconds"),
-            max_tokens=_positive_number(setting("llm", "max_tokens", "DEEPSEEK_MAX_TOKENS", 1200), "llm.max_tokens", integer=True),
+            timeout_seconds=_positive_number(model_setting("timeout_seconds", "DEEPSEEK_TIMEOUT_SECONDS", 45), "llm.timeout_seconds"),
+            max_tokens=_positive_number(model_setting("max_tokens", "DEEPSEEK_MAX_TOKENS", 1200), "llm.max_tokens", integer=True),
+            reasoning_effort=effort, reasoning_overrides=overrides,
         )
         agent = AgentConfig(_positive_number(setting("agent", "max_rounds", "AGENT_MAX_ROUNDS", 6), "agent.max_rounds", integer=True))
         database = Path(_text(setting("storage", "cases_database", "CASES_DATABASE", "data/cases.sqlite3"), "storage.cases_database"))
         if not database.is_absolute():
             database = PROJECT_DIR / database
-        return cls(llm, agent, StorageConfig(database.resolve()))
+        conversations = Path(_text(setting("storage", "conversations_database", "CONVERSATIONS_DATABASE", "data/conversations.sqlite3"), "storage.conversations_database"))
+        if not conversations.is_absolute():
+            conversations = PROJECT_DIR / conversations
+        return cls(llm, agent, StorageConfig(database.resolve(), conversations.resolve()))

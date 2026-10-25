@@ -1,15 +1,25 @@
 # 复制为 config.toml 后修改。config.toml 已被 Git 忽略。
-# 优先级：环境变量 > config.toml > 内置默认值。修改后重启应用。
+# 优先级：LLM_* 环境变量 > 旧 DEEPSEEK_* 环境变量 > config.toml > 默认值。
+# 只需填写 base_url 与 api_key，启动时自动 GET /models；支持 OpenAI 兼容 Chat Completions。
 
 [llm]
-api_key = ""                            # 或使用 DEEPSEEK_API_KEY
-model = "deepseek-flash"                 # DEEPSEEK_MODEL
-base_url = "https://api.deepseek.com"     # DEEPSEEK_BASE_URL；可含 /v1，不含 /chat/completions
-timeout_seconds = 45                     # DEEPSEEK_TIMEOUT_SECONDS
-max_tokens = 1200                        # DEEPSEEK_MAX_TOKENS
+api_key = ""                            # LLM_API_KEY；兼容 DEEPSEEK_API_KEY
+model = "deepseek-flash"                 # 可选：发现成功后可在页面选择；列表接口不可用时作为回退
+base_url = "https://api.deepseek.com"     # LLM_BASE_URL；可含 /v1，不含 /chat/completions
+timeout_seconds = 45
+max_tokens = 4096
+reasoning_effort = "default"
+
+# /models 未声明思考能力且模型族未知时，默认不发送思考参数。
+# 特殊兼容服务可选配置：界面档位 -> 服务接受的 reasoning_effort。
+# [llm.reasoning_overrides."your-model-id"]
+# low = "minimal"
+# medium = "medium"
+# high = "high"
 
 [agent]
-max_rounds = 6                           # AGENT_MAX_ROUNDS；带工具的模型请求轮数上限
+max_rounds = 10                           # AGENT_MAX_ROUNDS；带工具的模型请求轮数上限
 
 [storage]
 cases_database = "data/cases.sqlite3"     # CASES_DATABASE；相对路径以 work/ 为基准
+conversations_database = "data/conversations.sqlite3" # CONVERSATIONS_DATABASE；自动保存聊天及设计状态
