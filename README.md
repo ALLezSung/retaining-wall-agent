@@ -4,19 +4,19 @@
 
 ## 启动
 
-Python 3.10+、Streamlit 1.66+（底部固定输入区需要此版本），进入 `work/` 后执行：
+Python 3.10+；依赖范围见 `requirements.txt`（Streamlit >=1.41,<2）。本次验证环境为 Python 3.13.5、Streamlit 1.66.0、NumPy 2.5.4、pyarrow 26.0.0，其他版本组合未逐一验证。进入 `work/` 后执行：
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-$env:DEEPSEEK_API_KEY = "你的密钥"
+$env:LLM_API_KEY = "你的密钥"
 python -m streamlit run app.py
 ```
 
-也可执行 `python launch.py`；默认地址为 `http://localhost:8501`。端口冲突时使用 `--server.port 8502`。
+也可执行 `python launch.py`；默认地址为 `http://localhost:8501`。端口冲突时执行 `python -m streamlit run app.py --server.port 8502`。Linux/macOS 可用 `source .venv/bin/activate` 激活环境。
 
-复制 `config.example.toml` 为 `config.toml`，填写 `base_url` 和 `api_key` 后重启。启动时读取 `/models`，可在侧边栏底部选择模型和思考深度。列表接口不可用时回退到 `llm.model`，并可手动刷新。项目配置示例：
+可执行 `Copy-Item config.example.toml config.toml`（已有本机配置时不要覆盖），填写 `base_url` 和 `api_key` 后重启。也支持仅通过环境变量配置；未配置密钥时可浏览页面和使用本地案例，不能调用在线模型。配置密钥后，页面初始化模型设置时读取 `/models`，可在侧边栏底部选择模型和思考深度。列表接口不可用时回退到 `llm.model`，并可手动刷新。以下展示内置默认值；配置模板推荐较大的 `max_tokens=4096`、`max_rounds=10`：
 
 ```toml
 [llm]
@@ -35,7 +35,7 @@ cases_database = "data/cases.sqlite3"
 conversations_database = "data/conversations.sqlite3"
 ```
 
-模型配置优先级为 **LLM_* 环境变量 > 旧 DEEPSEEK_* 环境变量 > config.toml > 内置默认值**。配置格式、类型、未知字段和取值范围会在启动时检查，错误直接显示在页面。
+模型配置优先级为 **LLM 环境变量 > 旧 DEEPSEEK 环境变量 > config.toml > 内置默认值**。配置格式、类型、未知字段和取值范围会在启动时检查，错误直接显示在页面。
 
 | 配置项 | 环境变量 | 含义 |
 |---|---|---|
@@ -86,7 +86,6 @@ high = "high"
 - 已开始的对话与参数、结果、候选、模型历史、已读技能、所选规范一起自动保存到 SQLite；模型请求失败也保留交互记录，重新启动后可从侧栏继续。
 - 正文实时流式输出：当前正在生成的文本从第一个字起使用正常正文样式；只有工具事件确认该 Run 是中间说明后，才移入较小、低对比度的无序列表。最终回答沿用原正文槽，中断片段保留正文样式并显示提示；等待区展示当前 Run、执行阶段与已完成工具。保存后载入仍保留同样的层次。
 - 模型设置固定在侧边栏底部：第一行下拉选择“模型”，第二行用“思考深度”滑块选择档位，修改立即生效。
-- 点击侧栏对话标题可原位改名，回车或移开焦点保存；左侧箭头载入聊天，× 删除。当前聊天以主题色高亮，改名只更新标题，不改动聊天内容和参数。
 - 历史列表独立滚动，展示全部已保存聊天；侧栏上部内容较长时可独立滚动，底部模型设置保持可见。
 
 每轮成果收纳为“计算书”和“系统状态”两个折叠卡片。计算书内包含参数表、背景、逐项计算、基底压力、所选规范校核、补充资料与 JSON/Markdown 下载；系统状态包含 Run 执行情况和工具调用明细。历史卡片保留该消息生成时的数据。侧栏提示当前方案是否仍有有效结果；历史卡片不代表修改后的方案。
@@ -99,6 +98,11 @@ work/
   launch.py
   config.toml               本机配置，不入 Git
   config.example.toml       配置模板
+  requirements.txt          运行依赖
+  .streamlit/config.toml    页面主题配置
+  data/                     业务持久化数据，不入 Git
+    cases.sqlite3           原案例与教学预设库
+    conversations.sqlite3   原设计会话库
   src/
     config.py               TOML 读取、类型校验及环境变量覆盖
     llm/
@@ -114,8 +118,9 @@ work/
       session.py            权威参数表、结果、候选、来源、墙型、规范选择
       application.py        设计状态、聊天操作、上下文与成果入口
       conversations.py      应用定义的会话存储接口
+      persistence/
+        sqlite.py           设计会话快照的 SQLite 实现
     bootstrap.py            组合根：注入模型与 SQLite 适配器
-    persistence/sqlite.py   会话存储接口的 SQLite 实现
     skills/
       retaining_wall/
         SKILL.md            挡墙流程、参数、范围和局限
@@ -137,10 +142,13 @@ work/
     test_config.py
     test_webui.py
     test_interaction.py
-  docs/migration.md          迁移清单、基准和已知边界
+    test_storage_paths.py   数据库路径与旧会话快照兼容检查
+    manual/visual/          假模型预览、浏览器检查脚本及使用说明
+    .runtime/               临时数据库、日志、截图等输出，不入 Git
+  docs/                    文档
 ```
 
-依赖方向：网页只调用设计业务入口；设计业务装配通用 agent 和 skill，通过模型协议及 ConversationStore 接口访问外部能力；组合根注入模型与 SQLite 适配器；通用 agent 不知道具体业务含义。算法、校验和报告可以不经过 LLM 独立调用。
+依赖方向：网页只调用设计业务入口；设计业务装配通用 agent 和 skill，通过模型协议及 `design_agent/conversations.py` 的 `ConversationStore` 接口访问外部能力。SQLite 实现归 `design_agent/persistence` 管理，不导入应用或网页；`bootstrap.py` 在工厂内延迟导入适配器并注入，避免包初始化时形成循环依赖。通用 agent 和模型层不依赖持久化实现。挡墙案例的存储仍归 `skills/retaining_wall/cases.py`，技能层无需反向依赖设计智能体。算法、校验和报告可以不经过 LLM 独立调用。
 
 ## 模型与工具循环
 
@@ -218,6 +226,12 @@ class Model:
 
 SQLite 默认使用 `work/data/cases.sqlite3`，也可通过配置改变路径。更改路径会打开另一份案例库，不会自动搬迁原数据。聊天默认另存于 `work/data/conversations.sqlite3`，可用 `storage.conversations_database` / `CONVERSATIONS_DATABASE` 配置；与原案例表独立，不改动原案例数据。应用通过 `ConversationStore` 接口注入 SQLite 实现，单个事务保存完整快照。存储失败会提示，内存中的聊天仍可见。模型请求会发送对话、参数和工具结果给配置的服务，请勿输入涉密资料。
 
+数据库路径统一由 `src/config.py` 相对于项目根目录解析，与当前工作目录、适配器文件层级无关。本次移动代码没有移动业务数据库，也没有修改表结构或会话快照版本。保留原 `config.toml` 和存储环境变量即可继续访问原数据。直接构造 `DesignAgent(db_path=...)` 的兼容入口仍将该路径用于案例与会话两类表；需要分开存储时使用 `ProjectConfig.storage` 或注入 `ConversationStore`。
+
+`data/` 仅存放数据库及必要的持久化数据；备份应保留完整 SQLite 数据（若有 WAL/SHM 等配套文件也需一并考虑）。测试固定资源放在 `tests/fixtures/`，现有 `legacy_cases.json` 是算法回归基准。自动测试在 `tests/.runtime/` 下创建独立临时目录并在结束后清理；手动预览的数据库和截图写入 `tests/.runtime/visual/`。这些输出已加入 `.gitignore`，不能作为需要版本管理的夹具存放位置。
+
+原 `data/test-runtime/` 中的预览和浏览器脚本已迁入 `tests/manual/visual/`；既有测试数据库、截图、日志和浏览器目录保留在本机 `tests/.runtime/legacy/`，不作为正式测试输入。两个提交消息草稿对应的变更已记录在 Git 历史及 `docs/`，不属于业务数据，已删除。运行路径不再指向旧测试输出目录。
+
 ## 扩展与验证
 
 新增领域能力时，将纯 Python 实现和说明放入对应 skill，在其 `tools.py` 声明 `Tool(name, description, schema, execute)`，返回统一结果，再由应用启动装配注册。执行函数可直接注册；只有访问当前会话、转换输入或统一错误时才适配。不要在通用 loop 中增加按业务工具名分支。
@@ -230,6 +244,12 @@ SQLite 默认使用 `work/data/cases.sqlite3`，也可通过配置改变路径�
 python -m unittest discover -s tests -v
 python -m compileall -q src app.py launch.py
 ```
+
+测试使用假模型或模拟 HTTP，覆盖数值回归、工具协议、状态失效、会话保存/恢复及 Streamlit `AppTest` 交互，不访问真实模型服务。`test_storage_paths.py` 额外验证切换工作目录后的数据库路径、组合根装配、分离数据库的保存/恢复，以及由原始 SQL 建立的旧版会话快照可读写。所有测试写入隔离路径，不使用本机业务库；本机原数据库可另以 SQLite 只读连接检查完整性、表行数及迁移前后文件校验值。
+
+手动假模型预览见 `tests/manual/visual/README.md`。其中部分浏览器脚本对应旧页面布局，仅作为历史调试资源；本次不声称已重新验证其选择器、桌面或窄屏视觉效果。真实模型端点、认证及在线工具调用需在本机完成配置后另行验证。
+
+本次目录整理验证（2026-10-26）：56 项非页面测试通过；Windows 沙箱阻止本机回环连接后，11 项页面测试在允许本机连接的环境中重跑通过，共 67 项。编译检查、12 个浏览器脚本的 JavaScript 语法检查、真实入口的离线 `AppTest`、HTTP 健康检查和 5 个预览的启动检查通过；业务库与保留的测试库共 15 份数据库的迁移前后 SHA-256 一致。详细迁移与验证记录见 `docs/migration.md`。
 
 许可证：MIT。
 

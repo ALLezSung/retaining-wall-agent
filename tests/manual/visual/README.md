@@ -1,0 +1,21 @@
+# 手动假模型与浏览器调试资源
+
+这些脚本从原测试运行目录迁入，保留既有命名，不是自动测试夹具。Python 预览注入本地假模型，不调用真实服务；数据库写入 `tests/.runtime/visual/`，浏览器检查截图也写入该目录。旧运行产物单独保存在本机 `tests/.runtime/legacy/`，预览不会打开业务库或旧测试库。
+
+从 `work/` 启动一个预览：
+
+```powershell
+python -m streamlit run tests/manual/visual/preview_live_slots.py --server.port 8520
+```
+
+`preview_live_slots.py` 支持普通输入、包含“中断”或“上限”的输入，用于观察流式正文、连接中断及轮次上限；其他 `preview*.py` 保留历史计算、侧栏和多 Run 场景。`preview_sidebar.py` / `preview_review.py` 中仅改名再新建的草稿按当前规则不会成为持久化历史，不能据此断言已覆盖长历史列表。
+
+浏览器脚本通过本机 Chromium DevTools Protocol 工作，需另行启动 Edge/Chrome 并启用远程调试；Node.js 需提供全局 `fetch` 和 `WebSocket`（如 Node.js 22+）。示例需浏览器调试端口 9230、页面端口 8520：
+
+```powershell
+node tests/manual/visual/check_live_slots.cjs
+```
+
+如需独立浏览器目录，请放在 `tests/.runtime/visual/` 下。其余脚本使用固定端口：`check.cjs` 为 9227/8517，侧栏脚本为 9228/8518，review/run_messages 脚本为 9229/8519。请先核对脚本中的端口和页面，再运行。
+
+部分 `check*` / `inspect*` 脚本依赖旧版 `.st-key-composer` 或弹出式模型设置，甚至临时注入 CSS，仅作为历史诊断记录，不能视为当前自动验收。本次调整其文件位置和输出路径，5 个 Python 预览已通过 `AppTest` 启动检查，12 个 JavaScript 文件通过 `node --check`；浏览器选择器与视觉效果未重新验证。日常回归使用 `python -m unittest discover -s tests -v`，其中 Streamlit `AppTest` 使用独立临时数据库。

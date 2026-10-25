@@ -17,7 +17,7 @@ from src.config import ModelConfig
 from src.design_agent import DesignAgent
 from src.llm.compatible import OpenAICompatibleModel
 from src.llm.protocol import Message, ModelDelta, ModelError, ModelResponse, ToolCall
-from src.persistence.sqlite import SQLiteConversationStore
+from src.design_agent.persistence.sqlite import SQLiteConversationStore
 from src.skills.retaining_wall.cases import TEACHING_PRESETS
 from src.skills.retaining_wall.calculation import calculate_wall
 
@@ -182,7 +182,7 @@ class DiscoveryTests(unittest.TestCase):
 
 class ConversationTests(unittest.TestCase):
     def setUp(self):
-        root = ROOT / "data/test-runtime"
+        root = ROOT / "tests/.runtime"
         root.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(dir=root)
         self.db = Path(self.temp.name) / "conversations.sqlite3"

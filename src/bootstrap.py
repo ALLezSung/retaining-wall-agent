@@ -1,7 +1,6 @@
 """Composition root. Concrete adapters point inward to application contracts."""
 from .config import ProjectConfig
 from .llm.compatible import OpenAICompatibleModel
-from .persistence.sqlite import SQLiteConversationStore
 
 
 def configured_model(config):
@@ -9,6 +8,9 @@ def configured_model(config):
 
 
 def conversation_store(path):
+    # Import lazily so importing the composition root does not initialize the
+    # design application package while it is still being assembled.
+    from .design_agent.persistence.sqlite import SQLiteConversationStore
     return SQLiteConversationStore(path)
 
 

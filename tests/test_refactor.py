@@ -73,7 +73,7 @@ class RegressionTests(unittest.TestCase):
 
 class ApplicationTests(unittest.TestCase):
     def setUp(self):
-        temp_root = ROOT / "data" / "test-runtime"
+        temp_root = ROOT / "tests" / ".runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(dir=temp_root)
         self.db = Path(self.temp.name) / "cases.sqlite3"
@@ -81,7 +81,7 @@ class ApplicationTests(unittest.TestCase):
         self.registry = self.app.loop.registry
 
     def tearDown(self):
-        self.assertTrue(Path(self.temp.name).resolve().is_relative_to((ROOT / "data" / "test-runtime").resolve()))
+        self.assertTrue(Path(self.temp.name).resolve().is_relative_to((ROOT / "tests" / ".runtime").resolve()))
         self.temp.cleanup()
 
     def invoke(self, tool_name, **args):

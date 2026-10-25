@@ -9,7 +9,7 @@ from src.design_agent import DesignAgent
 
 class ConfigTests(unittest.TestCase):
     def setUp(self):
-        self.temp_root = PROJECT_DIR / "data/test-runtime"
+        self.temp_root = PROJECT_DIR / "tests/.runtime"
         self.temp_root.mkdir(parents=True, exist_ok=True)
         self.directory = tempfile.TemporaryDirectory(dir=self.temp_root)
         self.path = Path(self.directory.name) / "config.toml"

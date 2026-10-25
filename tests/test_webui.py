@@ -50,7 +50,7 @@ class WebUITests(unittest.TestCase):
                 for start in range(0, len(text), 3):
                     on_delta(ModelDelta(text[start:start+3]))
                 return ModelResponse(text, calls)
-        temp_root = ROOT / "data/test-runtime"
+        temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
             agent = DesignAgent(StreamingPageModel(), db_path=Path(directory) / "stream-ui.sqlite3")
@@ -161,7 +161,7 @@ class WebUITests(unittest.TestCase):
         self.assertEqual(notes.calls, [])
 
     def test_intermediate_runs_are_a_list_and_final_answer_is_a_separate_markdown(self):
-        temp_root = ROOT / "data/test-runtime"
+        temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
             model = PageModel()
@@ -178,7 +178,7 @@ class WebUITests(unittest.TestCase):
             self.assertTrue(any(item.value == "**最终结论**：可以继续核算。" for item in page.markdown))
 
     def test_round_limit_shows_pause_status(self):
-        temp_root = ROOT / "data/test-runtime"
+        temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
             agent = DesignAgent(PageModel(), max_rounds=1, db_path=Path(directory) / "limit.sqlite3")
@@ -192,7 +192,7 @@ class WebUITests(unittest.TestCase):
             self.assertFalse(any(item.value.startswith("执行完成") for item in page.caption))
 
     def test_empty_conversations_remain_editable_drafts_without_saved_history(self):
-        temp_root = ROOT / "data/test-runtime"
+        temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
             agent = DesignAgent(PageModel(), db_path=Path(directory) / "drafts.sqlite3")
@@ -232,7 +232,7 @@ class WebUITests(unittest.TestCase):
             def select_model(self, identifier, effort="default"):
                 self.selected, self.reasoning_effort = identifier, effort
 
-        temp_root = ROOT / "data/test-runtime"
+        temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
             agent = DesignAgent(SelectablePageModel(), db_path=Path(directory) / "models.sqlite3")
@@ -251,7 +251,7 @@ class WebUITests(unittest.TestCase):
             self.assertTrue(any(item.label == "思考深度" for item in page.sidebar.select_slider))
 
     def test_inline_title_rename_and_all_history_are_visible(self):
-        temp_root = ROOT / "data/test-runtime"
+        temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
             model = type("HistoryModel", (), {"complete": lambda *args: ModelResponse("已记录。")})()
@@ -284,7 +284,7 @@ class WebUITests(unittest.TestCase):
             self.assertEqual(next(b for b in page.button if b.key == f"rename_{oldest}").proto.type, "primary")
 
     def test_page_case_chat_compare_apply_save_invalidate_and_reset(self):
-        temp_root = ROOT / "data/test-runtime"
+        temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
             agent = DesignAgent(PageModel(), db_path=Path(directory) / "page.sqlite3")
