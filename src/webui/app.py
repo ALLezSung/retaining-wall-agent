@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from html import escape
+from pathlib import Path
 from time import monotonic
 
 import streamlit as st
@@ -13,14 +14,12 @@ from ..config import ConfigError
 
 EFFORT_LABELS = {"default": "Default", "none": "OFF", "minimal": "Minimal", "low": "Light",
                  "medium": "Medium", "high": "High", "xhigh": "xHigh", "max": "Max", "ultra": "Ultra"}
-TOOL_LABELS = {"read_skill": "读取技能说明", "set_parameters": "更新参数表", "validate_parameters": "校验参数",
-               "calculate_design": "计算当前方案", "compare_designs": "比选方案", "apply_option": "选用方案",
-               "get_current_result": "读取计算结果", "list_cases": "查询案例", "load_case": "载入案例",
-               "lookup_standard": "查询所选规范"}
+TOOL_LABELS = {"read_skill": "读取技能说明", "read_skill_resource": "读取参考资源", "run_skill_action": "执行技能操作", "read_artifact": "读取成果"}
 EVENT_LABELS = {"run_started": "开始执行", "model_started": "请求模型", "model_finished": "模型返回",
-                "tool_started": "开始工具", "tool_finished": "工具完成", "design_updated": "参数/成果更新",
-                "artifact_created": "生成成果", "message_completed": "回复完成", "run_finished": "本轮完成",
-                "run_failed": "本轮中断", "run_limit_reached": "达到工具轮次上限", "run_stopped": "本轮暂停"}
+                "tool_started": "开始工具", "tool_finished": "工具完成", "state_updated": "状态更新",
+                "skill_started": "开始业务操作", "skill_finished": "业务操作结束", "artifact_created": "生成成果",
+                "message_completed": "回复完成", "run_finished": "本轮完成", "run_failed": "本轮中断",
+                "run_limit_reached": "达到工具轮次上限", "run_stopped": "本轮暂停"}
 STYLE = """
 <style>
 :root { --wall-accent: #bd684b; }
@@ -28,6 +27,10 @@ STYLE = """
 [data-testid="stSidebar"] { background: #f0eee8; border-right: 1px solid #e5e1d8; }
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: .65rem; }
 [data-testid="stMainBlockContainer"] { max-width: 1080px; padding-top: 4.5rem; padding-bottom: 5rem; }
+/* Expanded reports retain their intrinsic height above the bottom composer. */
+[data-testid="stMainBlockContainer"], [data-testid="stBottom"] { flex-shrink: 0; }
+main.stMain { overflow-anchor: none; }
+[data-testid="stLayoutWrapper"]:has(> .st-key-scroll_controller) { display:none; }
 h1 { font-size: 1.9rem !important; letter-spacing: -.04em; }
 [data-testid="stChatMessage"] { background: transparent; padding: 1.1rem .25rem; }
 [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) { background: #f0eee8; border-radius: 12px; padding: 1rem; }
@@ -85,6 +88,7 @@ class LiveTurn:
         self.current_is_final = False
         self.run = 0
         self.steps: list[str] = []
+        self.tool_label = ""
         self.stage = "准备执行"
         self.last_paint = 0.0
         self.last_status = ""
@@ -145,10 +149,15 @@ class LiveTurn:
             if monotonic() - self.last_paint > .035:
                 self.paint_text()
                 self.last_paint = monotonic()
+        elif event.name == "skill_started":
+            self.stage = data["label"]
+            self.tool_label = data["label"]
         elif event.name == "tool_started":
             self.stage = TOOL_LABELS.get(data["tool"], data["tool"])
+            self.tool_label = self.stage
         elif event.name == "tool_finished":
-            label = TOOL_LABELS.get(data["tool"], data["tool"])
+            label = self.tool_label or TOOL_LABELS.get(data["tool"], data["tool"])
+            self.tool_label = ""
             self.steps.append(label if data["output"].get("ok") else label + "（待处理）")
             self.stage = "整理工具结果"
         elif event.name == "model_finished":
@@ -173,50 +182,35 @@ class LiveTurn:
         self.paint_status()
 
 
-def show_optimization(optimization):
-    if optimization["recommended"] is None:
-        st.warning(optimization["reason"])
-    st.table([{
-        "方案": row["label"], "底宽 B (m)": f"{row['base_width_m']:.2f}",
-        "顶宽 t (m)": f"{row['top_width_m']:.2f}", "自重 (kN/m)": f"{row['wall_weight_kn_m']:.2f}",
-        "用量变化": f"{row['weight_change_percent']:+.1f}%", "抗滑": f"{row['sliding_ratio']:.3f}",
-        "抗倾覆": f"{row['overturning_ratio']:.3f}", "基底接触": row["base_contact"],
-        "教学筛选": "达到" if row["passes_teaching_screen"] else "未达到",
-    } for row in optimization["candidates"]])
-    st.caption(optimization["scope"])
-
-
-def show_details(item: dict, key: str):
-    artifacts = item.get("artifacts", {})
-    report, optimization = artifacts.get("report"), artifacts.get("optimization")
-    if report or optimization:
-        with st.expander("计算书", expanded=False):
-            st.caption("此计算书保留生成时的参数与规范；修改条件后需重新计算。")
-            if report:
-                st.markdown(report["summary"])
-                sections = report.get("sections")
-                if sections:
-                    tabs = st.tabs(["参数与背景", "逐项计算", "基底压力", "规范合规", "补充资料"])
-                    with tabs[0]:
-                        st.markdown(sections["参数表"])
-                        st.markdown("**计算背景**")
-                        st.markdown(sections["计算背景"])
-                    for tab, name in zip(tabs[1:], ["逐项计算结果", "基底压力", "规范合规情况", "需补充的验算资料"]):
+def show_details(item: dict, key: str, agent=None):
+    artifacts = item.get("artifacts", {}).get("items", [])
+    groups = {}
+    for artifact in artifacts:
+        groups.setdefault(artifact.get("group", artifact["title"]), []).append(artifact)
+    for title, members in groups.items():
+        with st.expander(title, expanded=False):
+            for artifact in members:
+                if artifact.get("summary"):
+                    st.caption(artifact["summary"])
+                if artifact.get("content"):
+                    st.markdown(artifact["content"])
+                if artifact.get("sections"):
+                    tabs = st.tabs([s["title"] for s in artifact["sections"]])
+                    for tab, section in zip(tabs, artifact["sections"]):
                         with tab:
-                            st.markdown(sections[name])
-                else:
-                    st.markdown(report["calculation"])
-                    st.markdown(report["standards"])
-                columns = st.columns(2)
-                with columns[0]:
-                    st.download_button("下载计算 JSON", report["json"], file_name="wall_result.json",
-                                       mime="application/json", key=f"json_{key}", use_container_width=True)
-                with columns[1]:
-                    st.download_button("下载计算书 Markdown", report["markdown"], file_name="wall_report.md",
-                                       mime="text/markdown", key=f"md_{key}", use_container_width=True)
-            if optimization:
-                st.markdown("**方案比选**")
-                show_optimization(optimization)
+                            st.markdown(section["content"])
+                if artifact["kind"] == "table":
+                    st.table(artifact.get("rows", []))
+                attachments = artifact.get("attachments", [])
+                if attachments and agent:
+                    columns = st.columns(len(attachments))
+                    for index, (column, attachment) in enumerate(zip(columns, attachments)):
+                        with column:
+                            try:
+                                st.download_button(attachment["label"], agent.artifact_bytes(attachment), file_name=attachment["filename"],
+                                    mime=attachment["mime"], key=f"download_{key}_{artifact['id']}_{index}", use_container_width=True)
+                            except (OSError, ValueError) as exc:
+                                st.error(f"附件暂不可读取：{exc}")
     events, trace = item.get("events", []), item.get("trace", [])
     if events or trace:
         with st.expander("系统状态", expanded=False):
@@ -231,7 +225,7 @@ def show_details(item: dict, key: str):
             execution, tools = st.tabs(["执行情况", "工具调用记录"])
             with execution:
                 st.table([{"Run": str(event.get("run") or "—"), "阶段": EVENT_LABELS.get(event.get("event"), event.get("event", "")),
-                           "说明": TOOL_LABELS.get(event.get("tool"), event.get("kind", "")),
+                           "说明": event.get("label", TOOL_LABELS.get(event.get("tool"), event.get("kind", ""))),
                            "耗时 (s)": str(event.get("elapsed_seconds", "—"))} for event in events])
             with tools:
                 if trace:
@@ -261,10 +255,10 @@ def show_answer(item: dict, key: str):
         st.markdown(item["content"])
 
 
-def show_message(item: dict, index: int, conversation_id: str = "chat"):
+def show_message(item: dict, index: int, conversation_id: str = "chat", agent=None):
     with st.chat_message(item["role"]):
         show_answer(item, f"{conversation_id}_{index}")
-        show_details(item, f"{conversation_id}_{index}")
+        show_details(item, f"{conversation_id}_{index}", agent)
 
 
 def begin_title_edit(agent: DesignAgent, identifier: str, title: str):
@@ -336,47 +330,65 @@ def sidebar(agent: DesignAgent):
                     st.error(str(exc))
             st.subheader("载入对话")
             conversation_history(agent)
-            with st.expander("规范加载", expanded=True):
-                selected = st.multiselect("选择本次核算规范", agent.standard_choices(),
-                    default=agent.read_session().selected_standards, key=f"standards_{agent.conversation_id}")
-                agent.select_standards(selected)
-                st.caption("所选规范纳入核算要求。变更后需重新计算；缺少数据的项目列为待验算。")
-            with st.expander("教学案例库", expanded=False):
-                presets = agent.teaching_cases()
-                by_title = {item["title"]: item for item in presets}
-                title = st.selectbox("从预设参数开始", list(by_title), key="teaching_case")
-                if title:
-                    st.caption(by_title[title]["note"])
-                if st.button("从案例新建对话", use_container_width=True):
-                    try:
-                        agent.reset()
-                        agent.load_teaching_case(title)
-                        st.rerun()
-                    except (RuntimeError, OSError, ValueError) as exc:
-                        st.error(str(exc))
-                saved = agent.saved_cases()
-                if saved:
-                    ids = {item["id"]: item for item in saved}
-                    identifier = st.selectbox("已保存的参数案例", list(ids), format_func=lambda i: ids[i]["title"])
-                    if st.button("从保存案例新建", use_container_width=True):
-                        try:
-                            agent.reset()
-                            agent.load_saved_case(identifier)
-                            st.rerun()
-                        except (RuntimeError, OSError, ValueError) as exc:
-                            st.error(str(exc))
-                if agent.read_session().current_result:
-                    name = st.text_input("保存案例名称", value="对话算例")
-                    if st.button("保存当前参数与结果", use_container_width=True):
-                        try:
-                            agent.save_case(name)
-                            st.success("参数案例已保存。")
-                        except (RuntimeError, OSError, ValueError) as exc:
-                            st.error(str(exc))
-            st.caption("当前方案：已有有效计算结果。" if agent.read_session().current_result else "当前方案：尚无有效计算结果。")
+            view = agent.application_view()
+            for panel in view.get("panels", []):
+                with st.expander(panel["title"], expanded=panel.get("expanded", False)):
+                    render_controls(agent, agent.config.skills.default_skill, panel.get("controls", []))
+                    if panel.get("caption"):
+                        st.caption(panel["caption"])
+            if view.get("status"):
+                st.caption(view["status"])
+            for skill_id, extra in agent.supplementary_views().items():
+                for panel in extra.get("panels", []):
+                    with st.expander(panel["title"], expanded=panel.get("expanded", False)):
+                        render_controls(agent, skill_id, panel.get("controls", []))
+                if extra.get("status"):
+                    st.caption(extra["status"])
         with st.container(key="sidebar_model_controls"):
             model_controls(agent)
 
+
+
+def render_controls(agent, skill_id, controls):
+    for control in controls:
+        if not control.get("enabled", True):
+            continue
+        kind = control["type"]
+        key = f"{skill_id}_{control['id']}_{agent.conversation_id}"
+        try:
+            if kind == "multiselect":
+                value = st.multiselect(control["label"], control["options"], default=control["value"], key=key)
+                if value != control["value"]:
+                    output = agent.execute_action(skill_id, control["action"], {control["argument"]: value})
+                    if not output["ok"]:
+                        st.error(output["error"]["message"])
+                    else:
+                        st.rerun()
+                continue
+            if kind == "select_action":
+                options = control["options"]
+                if not options:
+                    continue
+                values = {option["value"]: option for option in options}
+                value = st.selectbox(control["label"], list(values), format_func=lambda v: values[v]["label"], key=key)
+                if values[value].get("note"):
+                    st.caption(values[value]["note"])
+            elif kind == "text_action":
+                value = st.text_input(control["label"], value=control.get("value", ""), key=key)
+            elif kind == "button":
+                value = control.get("value")
+            else:
+                st.error("暂不支持该控件类型。")
+                continue
+            if st.button(control["button"], key=key + "_execute", use_container_width=True):
+                args = {control["argument"]: value} if control.get("argument") else {}
+                output = agent.execute_action(skill_id, control["action"], args, new_conversation=control.get("new_conversation", False))
+                if output["ok"]:
+                    st.rerun()
+                else:
+                    st.error(output["error"]["message"])
+        except (RuntimeError, OSError, ValueError) as exc:
+            st.error(str(exc))
 
 
 def model_controls(agent: DesignAgent):
@@ -410,33 +422,40 @@ def model_controls(agent: DesignAgent):
 
 
 def main():
-    st.set_page_config(page_title="挡土墙 · 设计工作台", page_icon="🧱", layout="wide")
+    st.set_page_config(page_title="设计工作台", page_icon="🧱", layout="wide")
     st.markdown(STYLE, unsafe_allow_html=True)
     if "design_agent" not in st.session_state:
         try:
             st.session_state.design_agent = create_agent()
-        except ConfigError as exc:
+        except (ConfigError, ValueError, RuntimeError) as exc:
             st.error(str(exc))
             st.stop()
     agent = st.session_state.design_agent
     sidebar(agent)
-    st.markdown('<div class="eyebrow">RETAINING WALL / AGENT</div>', unsafe_allow_html=True)
-    st.title("挡土墙设计工作台")
-    st.caption("讨论设计条件，逐项计算，保留每一步依据。")
+    view = agent.application_view()
+    st.markdown(f'<div class="eyebrow">{escape(view.get("eyebrow", "AGENT WORKSPACE"))}</div>', unsafe_allow_html=True)
+    st.title(view.get("title", "设计工作台"))
+    st.caption(view.get("subtitle", ""))
     st.divider()
     messages = agent.conversation_messages()
-    st.session_state.messages = messages  # Presentation mirror for integrations.
+    st.session_state.messages = messages
     if not messages:
-        session = agent.read_session()
-        st.markdown('<div class="welcome">从设计条件开始。<br>描述墙高、截面与填土条件，或从侧栏选用教学案例。</div>', unsafe_allow_html=True)
-        if session.parameters:
-            st.success("案例参数已载入，可直接提出计算或修改要求。")
-            # This projection is owned by the business layer.
-            st.markdown(agent.parameter_table())
-        st.caption("适用：墙高小于 5 m、干燥水平无黏性填土、直立墙背、水平基底及非地震教学工况。")
+        st.markdown(view.get("welcome", ""))
+        if view.get("loaded_message"):
+            st.success(view["loaded_message"])
+            st.markdown(view.get("parameter_table", ""))
+        st.caption(view.get("scope", ""))
     for index, message in enumerate(messages):
-        show_message(message, index, agent.conversation_id)
-    prompt = st.chat_input("输入设计条件、修改要求，或询问计算结果")
+        show_message(message, index, agent.conversation_id, agent)
+    # Explicit bottom placement keeps the composer pinned without enabling
+    # Streamlit's unconditional page-wide follow on expander/tab height changes.
+    with st.bottom:
+        prompt = st.chat_input(view.get("input_placeholder", "输入任务要求"))
+    with st.container(key="scroll_controller"):
+        controller = Path(__file__).with_name("scrolling.js").read_text(encoding="utf-8")
+        # Only our static script is executable. The session marker is HTML-escaped.
+        st.html(f'<span data-chat-session="{escape(agent.conversation_id, quote=True)}"></span>'
+                f'<script>{controller}</script>', unsafe_allow_javascript=True)
     if prompt:
         with st.chat_message("user"):
             st.markdown(prompt)

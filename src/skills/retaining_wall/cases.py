@@ -1,16 +1,6 @@
-"""Optional local long-term storage for teaching cases."""
-
-from __future__ import annotations
-
+"""Business case conversion. No database access or host imports."""
 import json
-import sqlite3
-from contextlib import contextmanager, closing
-from datetime import datetime
-from pathlib import Path
-
-from ...config import DEFAULT_DATABASE
-
-DEFAULT_DB = DEFAULT_DATABASE
+from .validation import check_parameters
 
 TEACHING_PRESETS = (
     ("基础干燥填土", "无附加荷载；梯形墙。所有参数均为教学假定。", {"height_m": 4, "base_width_m": 2.4, "top_width_m": 0.5, "soil_unit_weight_kn_m3": 18, "friction_angle_deg": 30, "wall_unit_weight_kn_m3": 24, "base_friction_coefficient": 0.55, "surcharge_kpa": 0}),
@@ -19,64 +9,25 @@ TEACHING_PRESETS = (
 )
 
 
-@contextmanager
-def _connect(db_path: Path):
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    with closing(sqlite3.connect(db_path)) as connection, connection:
-        connection.execute(
-            """CREATE TABLE IF NOT EXISTS cases (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_at TEXT NOT NULL,
-                title TEXT NOT NULL,
-                values_json TEXT NOT NULL,
-                result_json TEXT NOT NULL
-            )"""
-        )
-        connection.execute("""CREATE TABLE IF NOT EXISTS teaching_presets (
-            id INTEGER PRIMARY KEY,
-            title TEXT NOT NULL,
-            note TEXT NOT NULL,
-            values_json TEXT NOT NULL
-        )""")
-        connection.executemany(
-            "INSERT OR IGNORE INTO teaching_presets(id,title,note,values_json) VALUES(?,?,?,?)",
-            [(i, title, note, json.dumps(values, ensure_ascii=False)) for i, (title, note, values) in enumerate(TEACHING_PRESETS, 1)],
-        )
-        yield connection
+def validate_values(values):
+    checked = check_parameters(values)
+    if not checked.valid:
+        raise ValueError(checked.message)
 
 
-def list_teaching_presets(db_path: Path = DEFAULT_DB) -> list[dict]:
-    with _connect(db_path) as db:
-        rows = db.execute("SELECT id,title,note,values_json FROM teaching_presets ORDER BY id").fetchall()
-    return [{"id": row[0], "title": row[1], "note": row[2], "values": json.loads(row[3])} for row in rows]
-
-
-def save_case(title: str, values: dict, result: dict, db_path: Path = DEFAULT_DB) -> int:
-    name = title.strip()[:80]
-    if not name:
-        raise ValueError("案例名称不能为空。")
-    with _connect(db_path) as db:
-        cur = db.execute(
-            "INSERT INTO cases(created_at,title,values_json,result_json) VALUES(?,?,?,?)",
-            (datetime.now().isoformat(timespec="seconds"), name,
-             json.dumps(values, ensure_ascii=False), json.dumps(result, ensure_ascii=False)),
-        )
-        return int(cur.lastrowid)
-
-
-def list_cases(db_path: Path = DEFAULT_DB) -> list[dict]:
-    with _connect(db_path) as db:
-        rows = db.execute(
-            "SELECT id,created_at,title FROM cases ORDER BY id DESC LIMIT 20"
-        ).fetchall()
-    return [{"id": row[0], "created_at": row[1], "title": row[2]} for row in rows]
-
-
-def load_case(case_id: int, db_path: Path = DEFAULT_DB) -> dict:
-    with _connect(db_path) as db:
-        row = db.execute(
-            "SELECT title,values_json,result_json FROM cases WHERE id=?", (case_id,)
-        ).fetchone()
-    if row is None:
-        raise ValueError("找不到这个案例。")
-    return {"title": row[0], "values": json.loads(row[1]), "result": json.loads(row[2])}
+def documents(resources):
+    output = {}
+    for i, (title, note, values) in enumerate(TEACHING_PRESETS, 1):
+        output[("preset", i)] = {"kind": "preset", "id": i, "title": title, "note": note, "values": values}
+    legacy = resources.get("legacy_tables", {})
+    for row in legacy.get("teaching_presets", []):
+        output[("preset", row["id"])] = {"kind": "preset", "id": row["id"], "title": row["title"], "note": row["note"], "values": json.loads(row["values_json"])}
+    for row in legacy.get("cases", []):
+        output[("case", row["id"])] = {"kind": "case", "id": row["id"], "created_at": row["created_at"], "title": row["title"], "values": json.loads(row["values_json"]), "result": json.loads(row["result_json"])}
+    for doc in resources.get("documents", []):
+        if doc.get("kind") not in {"case", "preset"} or type(doc.get("id")) is not int or not isinstance(doc.get("title"), str):
+            raise ValueError("案例数据格式无效。")
+        output[(doc["kind"], doc["id"])] = doc
+    for doc in output.values():
+        validate_values(doc["values"])
+    return list(output.values())

@@ -4,25 +4,15 @@ from __future__ import annotations
 import re
 from copy import deepcopy
 from pathlib import Path
-from typing import Protocol, Any
+from dataclasses import asdict
+from .state import WallState, BusinessError as ToolError, success
 
-from ...agent.tools import Tool, ToolError, success
-from ..standards.index import selected_standard_report
+from .standards_policy import selected_standard_report
 from . import cases
 from .calculation import calculate_wall
 from .models import FIELD_LABELS
 from .validation import check_parameters
 from .variants import optimize_geometry
-
-
-class SessionAccess(Protocol):
-    protected_dimensions: set[str]
-
-    def read_session(self) -> Any: ...
-    def commit_parameters(self, values: dict, sources: dict, shape: str | None,
-                          *, replace: bool = False) -> None: ...
-    def store_result(self, result: dict) -> None: ...
-    def store_options(self, optimization: dict) -> None: ...
 
 
 def protected_dimensions(text: str) -> set[str]:
@@ -60,17 +50,26 @@ def calculate_current(values: dict, selected_standards: list[str]) -> dict:
     return result
 
 
-class WallTools:
-    def __init__(self, access: SessionAccess, db_path: Path = cases.DEFAULT_DB):
-        self.access = access
-        self.db_path = db_path
+class WallOperations:
+    def __init__(self, state: WallState, resources: dict, user_text: str = "", operation_id: str = ""):
+        self.access = state
+        self.access.protected_dimensions = protected_dimensions(user_text)
+        self.resources = resources
+        self.resource_proposals = []
+        self.operation_id = operation_id
 
     def set_parameters(self, **arguments) -> dict:
         session = self.access.read_session()
         values = dict(session.parameters)
+        if set(arguments) - set(FIELD_LABELS) - {"wall_shape"}:
+            raise ToolError("INVALID_INPUT", "包含未知参数。")
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) for k, v in arguments.items() if k in FIELD_LABELS):
+            raise ToolError("INVALID_INPUT", "参数必须是数字。")
         supplied = {key: float(value) for key, value in arguments.items() if key in FIELD_LABELS}
         values.update(supplied)
         shape = arguments.get("wall_shape", session.wall_shape)
+        if shape not in {None, "rectangle", "trapezoid"}:
+            raise ToolError("INVALID_INPUT", "墙型无效。")
         if shape == "rectangle" and "base_width_m" in values:
             if "top_width_m" in supplied and values["top_width_m"] != values["base_width_m"]:
                 raise ToolError("INVALID_INPUT", "矩形墙要求墙顶宽等于墙底宽。")
@@ -101,6 +100,8 @@ class WallTools:
         return success({"result": result_evidence(result)})
 
     def compare_designs(self, fixed_dimensions: list[str] | None = None) -> dict:
+        if fixed_dimensions is not None and (not isinstance(fixed_dimensions, list) or not all(isinstance(k, str) and k in {"base_width_m", "top_width_m"} for k in fixed_dimensions)):
+            raise ToolError("INVALID_INPUT", "固定尺寸必须是底宽/顶宽标识列表。")
         session = self.access.read_session()
         if session.current_result is None:
             raise ToolError("INVALID_STATE", "请先提供全部参数并完成当前方案的计算。")
@@ -116,6 +117,8 @@ class WallTools:
 
     def apply_option(self, index: int) -> dict:
         session = self.access.read_session()
+        if type(index) is not int:
+            raise ToolError("INVALID_INPUT", "候选编号必须为整数。")
         options = (session.pending_options or {}).get("alternatives", [])
         if index < 1 or index > len(options):
             raise ToolError("INVALID_STATE", f"没有该编号的候选；当前有 {len(options)} 个候选。")
@@ -137,66 +140,54 @@ class WallTools:
             raise ToolError("INVALID_STATE", "当前没有有效计算结果，请先完成计算。")
         return success({"result": result_evidence(result)})
 
-    def teaching_cases(self) -> list[dict]:
-        return cases.list_teaching_presets(self.db_path)
+    def documents(self):
+        return cases.documents(self.resources)
 
-    def saved_cases(self) -> list[dict]:
-        return cases.list_cases(self.db_path)
+    def teaching_cases(self):
+        return [d for d in self.documents() if d["kind"] == "preset"]
 
-    def available_cases(self) -> dict[str, dict]:
-        available = {item["title"]: item["values"] for item in self.teaching_cases()}
-        available.update({f"{item['id']} · {item['title']}": cases.load_case(item["id"], self.db_path)["values"]
-                          for item in self.saved_cases()})
-        return available
+    def saved_cases(self):
+        return [d for d in self.documents() if d["kind"] == "case"][-20:][::-1]
 
-    def list_cases(self) -> dict:
+    def available_cases(self):
+        return {d["title"] if d["kind"] == "preset" else f"{d['id']} · {d['title']}": d["values"] for d in self.documents()}
+
+    def list_cases(self):
         return success({"case_names": list(self.available_cases())})
 
-    def _load(self, title: str, values: dict) -> dict:
-        if all(key in values for key in FIELD_LABELS):
-            require_parameters(values)
-        self.access.commit_parameters(values, {key: f"数据库案例：{title}" for key in values},
-                                      shape_from_parameters(values), replace=True)
+    def _load(self, title, values):
+        cases.validate_values(values)
+        self.access.commit_parameters(values, {key: f"数据库案例：{title}" for key in values}, shape_from_parameters(values), replace=True)
         return success({"loaded_case": title, "values": values})
 
-    def load_case(self, title: str) -> dict:
+    def load_case(self, title):
         available = self.available_cases()
         matches = [name for name in available if name == title]
         if not matches:
             matches = [name for name in available if title and title in name]
         if len(matches) != 1:
             raise ToolError("INVALID_INPUT", "案例名称不唯一或不存在。请先列出案例名称。")
-        chosen = matches[0]
-        return self._load(chosen, available[chosen])
+        return self._load(matches[0], available[matches[0]])
 
-    def load_saved(self, case_id: int) -> dict:
-        old = cases.load_case(case_id, self.db_path)
-        return self._load(old["title"], old["values"])
+    def load_saved(self, case_id):
+        found = [d for d in self.documents() if d["kind"] == "case" and str(d["id"]) == str(case_id)]
+        if len(found) != 1:
+            raise ToolError("INVALID_INPUT", "找不到这个案例。")
+        return self._load(found[0]["title"], found[0]["values"])
 
-    def save_current(self, title: str) -> int:
-        session = self.access.read_session()
-        if session.current_result is None:
+    def save_current(self, title):
+        if self.access.current_result is None:
             raise ToolError("INVALID_STATE", "请先计算当前方案再保存。")
-        return cases.save_case(title, session.parameters, session.current_result, self.db_path)
-
-    def definitions(self) -> list[Tool]:
-        empty = {"type": "object", "properties": {}, "additionalProperties": False}
-        numeric = {key: {"type": "number", "description": label} for key, label in FIELD_LABELS.items()}
-        return [
-            Tool("set_parameters", "保存用户明确提供的挡墙参数，不自动计算；不得猜测参数。", {
-                "type": "object", "properties": {**numeric, "wall_shape": {"type": "string", "enum": ["rectangle", "trapezoid"]}},
-                "additionalProperties": False}, self.set_parameters),
-            Tool("validate_parameters", "检查当前参数是否齐全、数值范围和几何关系，不代表设计合格。", empty, self.validate_parameters),
-            Tool("calculate_design", "校验当前参数并调用确定性计算，返回数值证据和适用范围。", empty, self.calculate_design),
-            Tool("compare_designs", "搜索挡墙几何方案，可锁定底宽或顶宽，不改变当前参数。", {
-                "type": "object", "properties": {"fixed_dimensions": {"type": "array", "items": {
-                    "type": "string", "enum": ["base_width_m", "top_width_m"]}}}, "additionalProperties": False}, self.compare_designs),
-            Tool("apply_option", "用户同意候选后按编号选用并重新计算；未指定编号时用1。", {
-                "type": "object", "properties": {"index": {"type": "integer", "minimum": 1, "maximum": 3}},
-                "required": ["index"], "additionalProperties": False}, self.apply_option),
-            Tool("get_current_result", "读取当前有效计算结果及计算步骤。", empty, self.get_current_result),
-            Tool("list_cases", "列出本地教学及已保存案例的名称。", empty, self.list_cases),
-            Tool("load_case", "按名称载入案例参数；需要结果时再计算。", {
-                "type": "object", "properties": {"title": {"type": "string"}},
-                "required": ["title"], "additionalProperties": False}, self.load_case),
-        ]
+        if not isinstance(title, str) or not title.strip():
+            raise ToolError("INVALID_INPUT", "案例名称不能为空。")
+        docs = self.documents()
+        saved = [d for d in docs if self.operation_id and d.get("operation_id") == self.operation_id]
+        if saved:
+            return success({"case_id": saved[0]["id"]})
+        identifier = max([int(d["id"]) for d in docs if d["kind"] == "case"] or [0]) + 1
+        document = {"kind": "case", "id": identifier, "title": title.strip()[:80], "operation_id": self.operation_id,
+                    "values": self.access.parameters, "result": self.access.current_result}
+        # Include legacy rows in an idempotent resource-only import; never rewrite originals.
+        self.resource_proposals = [{"id": f"{d['kind']}:{d['id']}", "document": d} for d in docs]
+        self.resource_proposals.append({"id": f"case:{identifier}", "document": document})
+        return success({"case_id": identifier})

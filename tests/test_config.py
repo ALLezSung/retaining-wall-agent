@@ -4,7 +4,8 @@ import unittest
 from pathlib import Path
 
 from src.config import AgentConfig, ConfigError, ModelConfig, ProjectConfig, StorageConfig, PROJECT_DIR
-from src.design_agent import DesignAgent
+from src.bootstrap import create_agent
+from support import business, business_artifacts, BusinessRegistry, skill_call, wire_action
 
 
 class ConfigTests(unittest.TestCase):
@@ -41,10 +42,10 @@ cases_database = "data/configured.sqlite3"
         self.assertEqual(config.agent.max_rounds, 3)
         self.assertEqual(config.storage.cases_database, PROJECT_DIR / "data/configured.sqlite3")
         self.assertNotIn("offline-config-secret", repr(config))
-        app = DesignAgent(config=config)
+        app = create_agent(config=config)
         self.assertEqual(app.loop.max_rounds, 3)
         self.assertEqual(app.loop.model.config, config.llm)
-        self.assertEqual(app.wall.db_path, config.storage.cases_database)
+        self.assertEqual(app.capabilities.resources.path, config.storage.cases_database)
         self.assertNotIn("offline-config-secret", str(app.context_snapshot()))
 
     def test_environment_overrides_toml_and_defaults(self):

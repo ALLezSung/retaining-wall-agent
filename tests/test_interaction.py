@@ -14,10 +14,11 @@ from urllib.error import HTTPError
 from src.agent.loop import AgentLoop
 from src.agent.tools import ToolRegistry
 from src.config import ModelConfig
-from src.design_agent import DesignAgent
+from src.bootstrap import create_agent
+from support import business, business_artifacts, BusinessRegistry, skill_call, wire_action
 from src.llm.compatible import OpenAICompatibleModel
 from src.llm.protocol import Message, ModelDelta, ModelError, ModelResponse, ToolCall
-from src.design_agent.persistence.sqlite import SQLiteConversationStore
+from src.design_agent.infrastructure.sqlite_conversations import SQLiteConversationStore
 from src.skills.retaining_wall.cases import TEACHING_PRESETS
 from src.skills.retaining_wall.calculation import calculate_wall
 
@@ -197,12 +198,12 @@ class ConversationTests(unittest.TestCase):
                 self.responses = deque(responses)
             def complete(self, messages, tools):
                 return self.responses.popleft() if self.responses else ModelResponse("继续。")
-        return DesignAgent(Model(), db_path=self.db, conversation_store=self.store)
+        return create_agent(Model(), db_path=self.db, conversation_store=self.store)
 
     def test_run_preambles_and_final_answer_remain_separate_after_reload(self):
         intro = "先读取技能。\n\n再核对当前条件。"
         final = "**最终回答**：已完成核对。"
-        app = self.agent(ModelResponse(intro, (ToolCall("r", "read_skill", '{"name":"retaining_wall"}'),)), ModelResponse(final))
+        app = self.agent(ModelResponse(intro, (skill_call("r", "read_skill", '{"name":"retaining_wall"}'),)), ModelResponse(final))
         turn = app.chat("请核对")
         self.assertEqual(turn.content, final)
         self.assertEqual(turn.run_messages, [{"run": 1, "content": intro}])
@@ -216,14 +217,14 @@ class ConversationTests(unittest.TestCase):
 
     def test_legacy_joined_reply_is_split_for_display_without_rewriting_history(self):
         intro, final = "先读取技能。", "最终回答。"
-        app = self.agent(ModelResponse(intro, (ToolCall("r", "read_skill", '{"name":"retaining_wall"}'),)), ModelResponse(final))
+        app = self.agent(ModelResponse(intro, (skill_call("r", "read_skill", '{"name":"retaining_wall"}'),)), ModelResponse(final))
         app.chat("请核对")
         identifier = app.conversation_id
         record = self.store.load(identifier)
         payload = record["payload"]
         payload["messages"][-1].pop("run_messages")
         payload["messages"][-1]["content"] = intro + "\n\n" + final
-        self.store.save(identifier, record["title"], record["created_at"], payload)
+        self.store.save(identifier, record["title"], record["created_at"], {**payload, "expected_revision": payload["storage_revision"]})
         reloaded = self.agent()
         reloaded.load_conversation(identifier)
         message = reloaded.conversation_messages()[-1]
@@ -239,10 +240,10 @@ class ConversationTests(unittest.TestCase):
                 self.count += 1
                 if self.count == 1:
                     on_delta(ModelDelta("先读取技能。"))
-                    return ModelResponse("先读取技能。", (ToolCall("r", "read_skill", '{"name":"retaining_wall"}'),))
+                    return ModelResponse("先读取技能。", (skill_call("r", "read_skill", '{"name":"retaining_wall"}'),))
                 on_delta(ModelDelta("部分最终回答。"))
                 raise ModelError("连接中断")
-        app = DesignAgent(PartialModel(), db_path=self.db, conversation_store=self.store)
+        app = create_agent(PartialModel(), db_path=self.db, conversation_store=self.store)
         turn = app.chat("请核对")
         self.assertTrue(turn.failed)
         self.assertEqual(turn.run_messages, [{"run": 1, "content": "先读取技能。"}])
@@ -256,11 +257,11 @@ class ConversationTests(unittest.TestCase):
                  ("calculate_design", {}), ("set_parameters", {"base_width_m": 2.7})]
         streams = [sse(chunk({"tool_calls": [{"index": 0, "id": f"call_{index}", "function": {
             "name": name, "arguments": json.dumps(arguments)}}]}), chunk(finish="tool_calls"))
-            for index, (name, arguments) in enumerate(calls)]
+            for index, (name, arguments) in enumerate(wire_action(n, a) for n, a in calls)]
         streams.append(sse(chunk({"content": final_content[:3]}), chunk({"content": final_content[3:]}), chunk(finish="stop")))
         model = OpenAICompatibleModel(ModelConfig(api_key="offline"))
-        app = DesignAgent(model, db_path=self.db, conversation_store=self.store, max_rounds=6)
-        app.load_teaching_case(TEACHING_PRESETS[0][0])
+        app = create_agent(model, db_path=self.db, conversation_store=self.store, max_rounds=6)
+        business(app).load_teaching_case(TEACHING_PRESETS[0][0])
         displayed = []
         with patch.object(model, "_open", side_effect=streams) as transport:
             turn = app.chat("核算该方案，需要满足基底最大压力小于60kpa，如果不行就一直优化，直到得到可行方案。", event_sink=displayed.append)
@@ -273,20 +274,20 @@ class ConversationTests(unittest.TestCase):
         self.assertNotIn("DSML", turn.content)
         self.assertNotIn("DSML", "".join(e.data.get("content", "") for e in events if e.name == "message_delta"))
         self.assertEqual(len(turn.trace), 6)
-        self.assertEqual(app.read_session().parameters["base_width_m"], 2.7)
-        self.assertIsNone(app.read_session().current_result)
+        self.assertEqual(business(app).read_session().parameters["base_width_m"], 2.7)
+        self.assertIsNone(business(app).read_session().current_result)
         self.assertFalse(any(event.name == "run_finished" for event in events))
         self.assertEqual(events[-1].name, "run_failed")
         self.assertEqual(payload["tool_choice"], "none")
         self.assertTrue(payload["tools"])
         self.assertFalse(any("DSML" in (m.content or "") for m in app.loop.history))
         calculate = sse(chunk({"tool_calls": [{"index": 0, "id": "resume_calc", "function": {
-            "name": "calculate_design", "arguments": "{}"}}]}), chunk(finish="tool_calls"))
+            "name": "run_skill_action", "arguments": json.dumps({"skill_id":"retaining_wall", "action_id":"calculate_design", "input":{}})}}]}), chunk(finish="tool_calls"))
         with patch.object(app.loop.model, "_open", side_effect=[calculate, sse(chunk({"content": "已按当前参数重新核算。"}), chunk(finish="stop"))]):
             resumed = app.chat("继续")
         self.assertFalse(resumed.failed)
-        self.assertLess(resumed.artifacts["result"]["base_pressure_max_kpa"], 60)
-        self.assertAlmostEqual(resumed.artifacts["result"]["base_pressure_max_kpa"], 57.81069958847743)
+        self.assertLess(business_artifacts(app, resumed.artifacts)["result"]["base_pressure_max_kpa"], 60)
+        self.assertAlmostEqual(business_artifacts(app, resumed.artifacts)["result"]["base_pressure_max_kpa"], 57.81069958847743)
 
     def test_round_limit_is_persisted_as_stopped_instead_of_completed(self):
         app, turn, events, payload = self.replay_pressure_scenario("底宽已改为 2.7 m，尚未重新计算，请继续核算。")
@@ -294,30 +295,30 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(turn.stop_reason, "round_limit")
         self.assertIn("轮次上限", turn.content)
         self.assertEqual(events[-1].name, "run_stopped")
-        self.assertIsNone(app.read_session().current_result)
+        self.assertIsNone(business(app).read_session().current_result)
         self.assertEqual(app.conversation_messages()[-1]["stop_reason"], "round_limit")
         self.assertEqual(self.store.load(app.conversation_id)["payload"]["messages"][-1]["stop_reason"], "round_limit")
         self.assertEqual(payload["messages"][-1]["role"], "system")
         self.assertIn("不要输出工具标记", payload["messages"][-1]["content"])
 
     def test_restart_restores_history_parameters_skills_candidates_and_report(self):
-        app = self.agent(ModelResponse(tool_calls=(ToolCall("r", "read_skill", '{"name":"retaining_wall"}'),
-            ToolCall("c", "calculate_design", "{}"), ToolCall("o", "compare_designs", "{}"))), ModelResponse("完成。"))
-        app.load_teaching_case(TEACHING_PRESETS[0][0])
+        app = self.agent(ModelResponse(tool_calls=(skill_call("r", "read_skill", '{"name":"retaining_wall"}'),
+            skill_call("c", "calculate_design", "{}"), skill_call("o", "compare_designs", "{}"))), ModelResponse("完成。"))
+        business(app).load_teaching_case(TEACHING_PRESETS[0][0])
         app.chat("计算并比选")
         identifier = app.conversation_id
-        expected_session, expected_history = app.read_session(), deepcopy(app.loop.history)
+        expected_session, expected_history = business(app).read_session(), deepcopy(app.loop.history)
         expected_messages = app.conversation_messages()
-        restarted = self.agent(ModelResponse(tool_calls=(ToolCall("p", "apply_option", '{"index":1}'),)), ModelResponse("已选用。"))
+        restarted = self.agent(ModelResponse(tool_calls=(skill_call("p", "apply_option", '{"index":1}'),)), ModelResponse("已选用。"))
         restarted.load_conversation(identifier)
-        self.assertEqual(restarted.read_session(), expected_session)
+        self.assertEqual(business(restarted).read_session(), expected_session)
         self.assertEqual(restarted.loop.history, expected_history)
         self.assertEqual(restarted.conversation_messages(), expected_messages)
         self.assertEqual(restarted.catalog.loaded, {"retaining_wall"})
-        self.assertIn("report", restarted.conversation_messages()[-1]["artifacts"])
+        self.assertIn("report", business_artifacts(restarted, restarted.conversation_messages()[-1]["artifacts"]))
         restarted.chat("选方案一")
-        self.assertIsNone(restarted.read_session().pending_options)
-        self.assertIsNotNone(restarted.read_session().current_result)
+        self.assertIsNone(business(restarted).read_session().pending_options)
+        self.assertIsNotNone(business(restarted).read_session().current_result)
 
     def test_new_is_empty_recent_is_five_and_delete_active_does_not_resurrect(self):
         app = self.agent()
@@ -326,7 +327,7 @@ class ConversationTests(unittest.TestCase):
             ids.append(app.conversation_id)
             app.chat(str(index))
             app.reset()
-        self.assertEqual(app.read_session().parameters, {})
+        self.assertEqual(business(app).read_session().parameters, {})
         self.assertEqual(app.conversation_messages(), [])
         self.assertEqual(len(app.recent_conversations()), 5)
         self.assertRegex(app.conversation_title, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
@@ -339,11 +340,11 @@ class ConversationTests(unittest.TestCase):
 
     def test_drafts_do_not_write_when_created_configured_renamed_or_loaded_from_case(self):
         with patch.object(self.store, "save", wraps=self.store.save) as save:
-            app = DesignAgent(OpenAICompatibleModel(ModelConfig()), db_path=self.db, conversation_store=self.store)
+            app = create_agent(OpenAICompatibleModel(ModelConfig()), db_path=self.db, conversation_store=self.store)
             app.select_model("deepseek-flash", "low")
-            app.select_standards([])
+            business(app).select_standards([])
             app.rename_conversation(app.conversation_id, "草稿标题")
-            app.load_teaching_case(TEACHING_PRESETS[0][0])
+            business(app).load_teaching_case(TEACHING_PRESETS[0][0])
             self.assertTrue(app.save_conversation())
             for _ in range(10):
                 app.reset()
@@ -354,7 +355,7 @@ class ConversationTests(unittest.TestCase):
     def test_first_message_saves_draft_state_and_new_drafts_do_not_add_rows(self):
         app = self.agent()
         identifier = app.conversation_id
-        app.load_teaching_case(TEACHING_PRESETS[0][0])
+        business(app).load_teaching_case(TEACHING_PRESETS[0][0])
         app.rename_conversation(identifier, "方案草稿")
         self.assertEqual(app.all_conversations(), [])
         with patch.object(self.store, "save", wraps=self.store.save) as save:
@@ -362,7 +363,7 @@ class ConversationTests(unittest.TestCase):
             self.assertEqual(save.call_count, 1)
         stored = self.store.load(identifier)
         self.assertEqual(stored["title"], "方案草稿")
-        self.assertEqual(stored["payload"]["session"]["parameters"], app.read_session().parameters)
+        self.assertEqual(stored["payload"]["workspace"]["states"]["wall_design"]["payload"]["parameters"], business(app).read_session().parameters)
         self.assertEqual(len(stored["payload"]["messages"]), 2)
         app.reset()
         self.assertEqual(len(app.all_conversations()), 1)
@@ -377,7 +378,7 @@ class ConversationTests(unittest.TestCase):
             def complete_stream(self, messages, tools, on_delta):
                 on_delta(ModelDelta("部分回复"))
                 raise ModelError("流中断")
-        app = DesignAgent(PartialModel(), db_path=self.db, conversation_store=self.store)
+        app = create_agent(PartialModel(), db_path=self.db, conversation_store=self.store)
         seen = []
         turn = app.chat("hello", event_sink=seen.append)
         self.assertTrue(turn.failed)
@@ -389,13 +390,13 @@ class ConversationTests(unittest.TestCase):
         self.assertIsNone(app._turn_sink)
 
     def test_standard_change_invalidates_current_but_preserves_historical_book(self):
-        app = self.agent(ModelResponse(tool_calls=(ToolCall("c", "calculate_design", "{}"),)), ModelResponse("完成"))
-        app.load_teaching_case(TEACHING_PRESETS[0][0])
+        app = self.agent(ModelResponse(tool_calls=(skill_call("c", "calculate_design", "{}"),)), ModelResponse("完成"))
+        business(app).load_teaching_case(TEACHING_PRESETS[0][0])
         app.chat("计算")
-        old = app.conversation_messages()[-1]["artifacts"]["report"]
-        app.select_standards(["GB 50007-2011"])
-        self.assertIsNone(app.read_session().current_result)
-        self.assertEqual(app.conversation_messages()[-1]["artifacts"]["report"], old)
+        old = business_artifacts(app, app.conversation_messages()[-1]["artifacts"])["report"]
+        business(app).select_standards(["GB 50007-2011"])
+        self.assertIsNone(business(app).read_session().current_result)
+        self.assertEqual(business_artifacts(app, app.conversation_messages()[-1]["artifacts"])["report"], old)
         self.assertIn("规范合规情况", old["sections"])
         self.assertIn("GB 50330-2013", old["sections"]["规范合规情况"])
 

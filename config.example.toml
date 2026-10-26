@@ -23,3 +23,10 @@ max_rounds = 10                           # AGENT_MAX_ROUNDS；带工具的模�
 [storage]
 cases_database = "data/cases.sqlite3"     # CASES_DATABASE；相对路径以 work/ 为基准
 conversations_database = "data/conversations.sqlite3" # CONVERSATIONS_DATABASE；自动保存聊天及设计状态
+
+# 本项目的本地脚本技能约定；相对路径均基于 work/。
+[skills]
+directories = ["src/skills"]
+workspace = "data/workspace"
+default_skill = "retaining_wall"
+legacy_owner = "wall_design"

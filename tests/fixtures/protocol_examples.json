@@ -1,0 +1,192 @@
+{
+  "request": {
+    "protocol_version": 1,
+    "request_id": "req-001",
+    "skill_id": "reading_list",
+    "action_id": "add",
+    "input": {
+      "title": "算法导论"
+    },
+    "runtime": {
+      "run_id": "run-001",
+      "run": 1,
+      "call_id": "call-001",
+      "operation_id": "run-001:call-001",
+      "source": "model",
+      "user_text": "把算法导论加入清单",
+      "staging_dir": "."
+    },
+    "snapshot": {
+      "session_id": "session-001",
+      "owner": "reading_list",
+      "protocol_version": 1,
+      "data_version": 1,
+      "revision": "rev-001",
+      "payload": {
+        "books": []
+      },
+      "artifact_refs": []
+    },
+    "shared": {},
+    "resources": {}
+  },
+  "examples": [
+    {
+      "name": "无状态成功",
+      "response": {
+        "protocol_version": 1,
+        "request_id": "req-001",
+        "status": "ok",
+        "model_result": {
+          "message": "已读取清单"
+        },
+        "state_proposal": null,
+        "artifacts": [],
+        "resource_proposals": [],
+        "error": null
+      }
+    },
+    {
+      "name": "业务失败",
+      "response": {
+        "protocol_version": 1,
+        "request_id": "req-001",
+        "status": "business_error",
+        "model_result": {},
+        "state_proposal": null,
+        "artifacts": [],
+        "resource_proposals": [],
+        "error": {
+          "code": "INVALID_INPUT",
+          "message": "书名必须是非空字符串。"
+        }
+      }
+    },
+    {
+      "name": "参数不足",
+      "response": {
+        "protocol_version": 1,
+        "request_id": "req-001",
+        "status": "missing_input",
+        "model_result": {
+          "missing": [
+            "title"
+          ]
+        },
+        "state_proposal": null,
+        "artifacts": [],
+        "resource_proposals": [],
+        "error": {
+          "code": "MISSING_INPUT",
+          "message": "还缺少书名。"
+        }
+      }
+    },
+    {
+      "name": "状态变化与表格",
+      "response": {
+        "protocol_version": 1,
+        "request_id": "req-001",
+        "status": "ok",
+        "model_result": {
+          "count": 1,
+          "message": "已添加书目"
+        },
+        "state_proposal": {
+          "session_id": "session-001",
+          "owner": "reading_list",
+          "base_revision": "rev-001",
+          "data_version": 1,
+          "payload": {
+            "books": [
+              {
+                "title": "算法导论",
+                "read": false
+              }
+            ]
+          },
+          "artifact_refs": [
+            "books"
+          ]
+        },
+        "artifacts": [
+          {
+            "key": "books",
+            "kind": "table",
+            "title": "阅读清单",
+            "summary": "共 1 本书",
+            "rows": [
+              {
+                "序号": 1,
+                "书名": "算法导论",
+                "状态": "未读"
+              }
+            ]
+          }
+        ],
+        "resource_proposals": [],
+        "error": null
+      }
+    },
+    {
+      "name": "报告附件",
+      "response": {
+        "protocol_version": 1,
+        "request_id": "req-001",
+        "status": "ok",
+        "model_result": {
+          "message": "报告已生成"
+        },
+        "state_proposal": null,
+        "artifacts": [
+          {
+            "key": "report",
+            "kind": "report",
+            "title": "阅读报告",
+            "summary": "1 本未读书目",
+            "content": "本清单含 1 本书。",
+            "sections": [
+              {
+                "title": "书目",
+                "content": "算法导论：未读"
+              }
+            ],
+            "attachments": [
+              {
+                "path": "reading-report.md",
+                "filename": "reading-report.md",
+                "mime": "text/markdown",
+                "label": "下载阅读报告"
+              }
+            ]
+          }
+        ],
+        "resource_proposals": [],
+        "error": null
+      }
+    },
+    {
+      "name": "协议错误（故意无效）",
+      "response": {
+        "protocol_version": 999,
+        "request_id": "req-001",
+        "status": "ok",
+        "model_result": {
+          "message": "已读取清单"
+        },
+        "state_proposal": null,
+        "artifacts": [],
+        "resource_proposals": [],
+        "error": null
+      },
+      "host_result": {
+        "ok": false,
+        "data": null,
+        "error": {
+          "code": "INVALID_RESPONSE",
+          "message": "技能响应不符合协议，未提交业务变化。"
+        }
+      }
+    }
+  ]
+}

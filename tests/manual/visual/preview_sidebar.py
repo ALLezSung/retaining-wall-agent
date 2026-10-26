@@ -3,8 +3,17 @@ import sys
 from time import sleep
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 import streamlit as st
+from dataclasses import replace
+import json
 from src.config import ProjectConfig, ModelConfig, StorageConfig
-from src.design_agent import DesignAgent
+from src.bootstrap import create_agent
+from src.config import SkillsConfig
+
+def skill_call(identifier, name, arguments="{}"):
+    if name == "read_skill":
+        return ToolCall(identifier, name, arguments)
+    return ToolCall(identifier, "run_skill_action", json.dumps({"skill_id":"retaining_wall", "action_id":name, "input":json.loads(arguments)}))
+
 from src.llm.protocol import ModelInfo, ModelResponse, ModelDelta, ToolCall
 from src.webui.app import main
 
@@ -23,8 +32,8 @@ class PreviewModel:
             sleep(1.5)
             on_delta(ModelDelta(reasoning=True))
             sleep(2)
-            return ModelResponse(tool_calls=(ToolCall("read", "read_skill", '{"name":"retaining_wall"}'),
-                ToolCall("check", "validate_parameters", "{}"), ToolCall("calc", "calculate_design", "{}")))
+            return ModelResponse(tool_calls=(skill_call("read", "read_skill", '{"name":"retaining_wall"}'),
+                skill_call("check", "validate_parameters", "{}"), skill_call("calc", "calculate_design", "{}")))
         text = "已完成这组参数的教学初算。抗滑系数为 1.595，抗倾覆系数为 3.418，均达到已选 GB 50330 的教学对照值。地基承载力与整体稳定仍需补充资料；可在计算书中逐项复核。"
         for position in range(0, len(text), 3):
             on_delta(ModelDelta(text[position:position+3]))
@@ -33,12 +42,12 @@ class PreviewModel:
 
 if "design_agent" not in st.session_state:
     location = Path(__file__).resolve().parents[2] / ".runtime/visual"
-    app = DesignAgent(PreviewModel(), config=ProjectConfig(llm=ModelConfig(api_key=""),
+    app = create_agent(PreviewModel(), config=ProjectConfig(skills=replace(SkillsConfig(), workspace=Path(__file__).resolve().parents[2] / ".runtime/visual/workspace"),llm=ModelConfig(api_key=""),
         storage=StorageConfig(location / "sidebar-cases.sqlite3", location / "sidebar-conversations.sqlite3")))
     for i in range(12):
         app.rename_conversation(app.conversation_id, f"历史方案 {i + 1:02d}")
         app.reset()
     app.rename_conversation(app.conversation_id, "当前挡墙方案")
-    app.load_teaching_case("基础干燥填土")
+    app.execute_action("retaining_wall", "load_case", {"title":"基础干燥填土"})
     st.session_state.design_agent = app
 main()

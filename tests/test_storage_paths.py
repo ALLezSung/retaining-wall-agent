@@ -15,8 +15,9 @@ from src.config import (
     DEFAULT_CONVERSATIONS_DATABASE, DEFAULT_DATABASE, PROJECT_DIR,
     ModelConfig, ProjectConfig, StorageConfig,
 )
-from src.design_agent import DesignAgent
-from src.design_agent.persistence.sqlite import SQLiteConversationStore
+from src.bootstrap import create_agent
+from support import business, business_artifacts, BusinessRegistry, skill_call, wire_action
+from src.design_agent.infrastructure.sqlite_conversations import SQLiteConversationStore
 from src.llm.protocol import ModelResponse
 
 
@@ -66,7 +67,7 @@ class StoragePathTests(unittest.TestCase):
             app = bootstrap.create_agent()
         self.assertIsInstance(app._conversations, SQLiteConversationStore)
         self.assertEqual(app._conversations.path, self.chats)
-        self.assertEqual(app.wall.db_path, self.cases)
+        self.assertEqual(app.capabilities.resources.path, self.cases)
         self.assertFalse(self.chats.exists())  # An empty draft stays in memory.
         self.assertFalse(self.cases.exists())
 
@@ -97,15 +98,15 @@ class StoragePathTests(unittest.TestCase):
         store = bootstrap.conversation_store(self.chats)
         self.assertEqual(store.load("legacy")["payload"], payload)
         self.assertEqual(self.chats.read_bytes(), before)
-        app = DesignAgent(OfflineModel(), config=self.config, conversation_store=store)
+        app = create_agent(OfflineModel(), config=self.config, conversation_store=store)
         app.load_conversation("legacy")
-        self.assertEqual(app.read_session().parameters, payload["session"]["parameters"])
+        self.assertEqual(business(app).read_session().parameters, payload["session"]["parameters"])
         self.assertEqual(app.conversation_messages(), payload["messages"])
         self.assertEqual(app.catalog.loaded, {"retaining_wall"})
         app.chat("继续")
-        reloaded = DesignAgent(OfflineModel(), config=self.config)
+        reloaded = create_agent(OfflineModel(), config=self.config)
         reloaded.load_conversation("legacy")
-        self.assertEqual(reloaded.read_session(), app.read_session())
+        self.assertEqual(business(reloaded).read_session(), business(app).read_session())
         self.assertEqual(reloaded.conversation_messages(), app.conversation_messages())
         with closing(sqlite3.connect(self.chats)) as db:
             self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0], "ok")
@@ -113,17 +114,17 @@ class StoragePathTests(unittest.TestCase):
         self.assertFalse(self.cases.exists())
 
     def test_separate_case_and_conversation_databases_round_trip(self):
-        app = DesignAgent(OfflineModel(), config=self.config)
-        app.load_teaching_case("基础干燥填土")
-        app.wall.calculate_design()
-        case_id = app.save_case("隔离路径案例")
+        app = create_agent(OfflineModel(), config=self.config)
+        business(app).load_teaching_case("基础干燥填土")
+        business(app).action("calculate_design")
+        case_id = business(app).save_case("隔离路径案例")
         app.chat("保留计算结果")
-        restored = DesignAgent(OfflineModel(), config=self.config)
+        restored = create_agent(OfflineModel(), config=self.config)
         restored.load_conversation(app.conversation_id)
-        self.assertEqual(restored.read_session(), app.read_session())
-        restored.load_saved_case(case_id)
-        self.assertEqual(restored.read_session().parameters, app.read_session().parameters)
-        for path, expected in ((self.cases, {"cases", "teaching_presets"}),
+        self.assertEqual(business(restored).read_session(), business(app).read_session())
+        business(restored).load_saved_case(case_id)
+        self.assertEqual(business(restored).read_session().parameters, business(app).read_session().parameters)
+        for path, expected in ((self.cases, {"skill_documents"}),
                                (self.chats, {"conversations"})):
             with closing(sqlite3.connect(path)) as db:
                 tables = {row[0] for row in db.execute(
@@ -131,8 +132,8 @@ class StoragePathTests(unittest.TestCase):
                 self.assertEqual(tables, expected)
 
     def test_fresh_imports_work_in_both_orders_from_another_directory(self):
-        for modules in (("src.bootstrap", "src.design_agent.persistence.sqlite", "src.design_agent"),
-                        ("src.design_agent", "src.design_agent.persistence.sqlite", "src.bootstrap")):
+        for modules in (("src.bootstrap", "src.design_agent.infrastructure.sqlite_conversations", "src.design_agent"),
+                        ("src.design_agent", "src.design_agent.infrastructure.sqlite_conversations", "src.bootstrap")):
             script = (f"import sys, importlib; sys.path.insert(0, {str(PROJECT_DIR)!r}); "
                       f"[importlib.import_module(name) for name in {modules!r}]")
             result = subprocess.run([sys.executable, "-c", script], cwd=self.directory,

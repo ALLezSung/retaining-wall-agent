@@ -4,7 +4,7 @@
 
 ## 启动
 
-Python 3.10+；依赖范围见 `requirements.txt`（Streamlit >=1.41,<2）。本次验证环境为 Python 3.13.5、Streamlit 1.66.0、NumPy 2.5.4、pyarrow 26.0.0，其他版本组合未逐一验证。进入 `work/` 后执行：
+Python 3.10+；依赖范围见 `requirements.txt`（Streamlit >=1.66,<2）。本次验证环境为 Python 3.13.5、Streamlit 1.66.0、NumPy 2.5.4、pyarrow 26.0.0，其他版本组合未逐一验证。进入 `work/` 后执行：
 
 ```powershell
 python -m venv .venv
@@ -84,180 +84,57 @@ high = "high"
 - 教学案例通过“从案例新建对话”载入预存参数，不会自动消耗模型请求；保存参数案例的功能也收纳在这里。
 - 新建对话先作为内存草稿，首次发送消息后才自动保存到 SQLite；仅改名、切换模型/规范、载入案例不会新建持久化聊天记录。当前草稿仍可在侧栏显示与改名，放弃草稿不会堆积空历史。
 - 已开始的对话与参数、结果、候选、模型历史、已读技能、所选规范一起自动保存到 SQLite；模型请求失败也保留交互记录，重新启动后可从侧栏继续。
+- 输入框固定在页面底部；只有生成回答时自动跟随新内容。主动向上滚动或展开计算书后保持阅读位置，章节切换不再触发全页追底。
 - 正文实时流式输出：当前正在生成的文本从第一个字起使用正常正文样式；只有工具事件确认该 Run 是中间说明后，才移入较小、低对比度的无序列表。最终回答沿用原正文槽，中断片段保留正文样式并显示提示；等待区展示当前 Run、执行阶段与已完成工具。保存后载入仍保留同样的层次。
 - 模型设置固定在侧边栏底部：第一行下拉选择“模型”，第二行用“思考深度”滑块选择档位，修改立即生效。
 - 历史列表独立滚动，展示全部已保存聊天；侧栏上部内容较长时可独立滚动，底部模型设置保持可见。
 
 每轮成果收纳为“计算书”和“系统状态”两个折叠卡片。计算书内包含参数表、背景、逐项计算、基底压力、所选规范校核、补充资料与 JSON/Markdown 下载；系统状态包含 Run 执行情况和工具调用明细。历史卡片保留该消息生成时的数据。侧栏提示当前方案是否仍有有效结果；历史卡片不代表修改后的方案。
 
-## 架构与目录
+## 当前架构
 
-```text
-work/
-  app.py                    Streamlit 兼容启动入口
-  launch.py
-  config.toml               本机配置，不入 Git
-  config.example.toml       配置模板
-  requirements.txt          运行依赖
-  .streamlit/config.toml    页面主题配置
-  data/                     业务持久化数据，不入 Git
-    cases.sqlite3           原案例与教学预设库
-    conversations.sqlite3   原设计会话库
-  src/
-    config.py               TOML 读取、类型校验及环境变量覆盖
-    llm/
-      protocol.py           Message / ToolCall / ModelResponse / Model 接口
-      compatible.py         SSE、模型发现、思考映射、HTTP 与错误转换
-      deepseek.py           旧适配器兼容入口
-    agent/
-      loop.py               无领域分支的顺序执行循环
-      tools.py              注册表、运行时 schema 校验、统一工具协议
-      skills.py             稳定目录、按标识读取完整说明
-      events.py             同进程事件
-    design_agent/
-      session.py            权威参数表、结果、候选、来源、墙型、规范选择
-      application.py        设计状态、聊天操作、上下文与成果入口
-      conversations.py      应用定义的会话存储接口
-      persistence/
-        sqlite.py           设计会话快照的 SQLite 实现
-    bootstrap.py            组合根：注入模型与 SQLite 适配器
-    skills/
-      retaining_wall/
-        SKILL.md            挡墙流程、参数、范围和局限
-        tools.py            工具声明、执行、业务适配
-        models.py           输入模型与字段
-        validation.py       共用校验
-        calculation.py      原确定性计算
-        variants.py         原几何搜索
-        report.py           Markdown 报告
-        cases.py            SQLite 案例
-      standards/
-        SKILL.md            标准摘要查询说明
-        tools.py            标准工具注册
-        index.py            原摘要、元数据与覆盖说明
-    webui/app.py            Streamlit 组件及成果展示
-  tests/
-    fixtures/legacy_cases.json
-    test_refactor.py
-    test_config.py
-    test_webui.py
-    test_interaction.py
-    test_storage_paths.py   数据库路径与旧会话快照兼容检查
-    manual/visual/          假模型预览、浏览器检查脚本及使用说明
-    .runtime/               临时数据库、日志、截图等输出，不入 Git
-  docs/                    文档
-```
+采用“通用 Agent 框架＋通用原子能力＋业务 Skills 与普通业务脚本”。DesignAgent 只协调模型、技能目录、执行器、工作区、存储和界面；业务包定义、校验和转换权威业务载荷，宿主检查归属与修订并统一提交。
 
-依赖方向：网页只调用设计业务入口；设计业务装配通用 agent 和 skill，通过模型协议及 `design_agent/conversations.py` 的 `ConversationStore` 接口访问外部能力。SQLite 实现归 `design_agent/persistence` 管理，不导入应用或网页；`bootstrap.py` 在工厂内延迟导入适配器并注入，避免包初始化时形成循环依赖。通用 agent 和模型层不依赖持久化实现。挡墙案例的存储仍归 `skills/retaining_wall/cases.py`，技能层无需反向依赖设计智能体。算法、校验和报告可以不经过 LLM 独立调用。
+- 通用模型工具只有四项：read_skill、read_skill_resource、run_skill_action、read_artifact。挡墙的 set_parameters、calculate_design 等是脚本 action，不再注册为独立模型工具。
+- 技能目录由 skills.directories 配置，支持纯说明和脚本型技能；启动时稳定发现，不热加载。
+- wall_design 唯一拥有完整挡墙状态；规范技能只读其 StandardContextV1 投影。阅读清单示例拥有独立类型模型，可以在同一聊天使用。
+- 业务脚本仅使用 JSON 协议，不导入 Agent、界面、宿主配置或存储。原确定性算法和几何搜索保持不变。
+- 通用界面读取业务描述中的选项、动作、章节和表格，通过成果类型渲染；模型与思考配置仍由宿主管理。
 
-## 模型与工具循环
+宿主分为 llm、agent、design_agent、webui 四个层次；skills 是独立业务包。顶层 runtime 已收进 design_agent：skills 管协议和调用编排，workspace 管状态与提交规则，infrastructure 管子进程、SQLite 和文件实现。
 
-统一模型接口保持向后兼容：
+应用通过 ports.py 中的接口使用外部能力，由 bootstrap 创建并注入实现。普通调用改用 `from src.bootstrap import create_agent; agent = create_agent(...)`；直接构造 DesignAgent 时必须显式传入 model、config、ApplicationPorts。现有 app.py、launch.py 启动入口保留。
 
-```python
-class Model:
-    def complete(self, messages, tools) -> ModelResponse:
-        ...
-```
+完整说明：
 
-可选实现 `complete_stream(messages, tools, on_delta)` 返回最终 `ModelResponse` 并通过 `ModelDelta` 推送正文增量与思考活动通知。工具参数分片完全拼接、检查结束原因后才会执行。没有流式接口的旧模型继续使用 `complete`。
+- [架构边界与状态所有权](docs/architecture.md)
+- [输入、输出、状态和成果协议（含完整示例）](docs/skill-protocol.md)
+- [技能编写与独立运行指南](docs/skill-authoring.md)
+- [迁移和兼容说明](docs/migration.md)
 
-给 `DesignAgent(model=替代模型)` 注入实现即可替换模型，不需要改算法或网页。`tests/test_refactor.py` 中的假模型展示了无 API 的执行方式。
+## 数据与恢复
 
-每轮请求顺序：
+现有 data/cases.sqlite3 和 data/conversations.sqlite3 保留原位置。版本 1 聊天由业务脚本恢复为版本 2 工作区；只载入不重写旧行，下一次正常保存才升级。历史正文、trace、候选、计算书和精确下载内容保留。案例原表不删除，保存新案例时按业务规则转换为附加的通用文档集合。
 
-```text
-固定 system（身份、通用行为、skill 目录）
-历史 user / assistant / assistant工具调用 / tool结果
-当前 context 快照
-本轮 user
-本轮新增 assistant / tool……
-```
+成果附件保存在 skills.workspace 指定目录（默认 data/workspace），采用内容校验和稳定引用。备份必须同时保存两个数据库与整个工作区；仅复制 SQLite 不能带走新附件。文件写入先于数据库引用，异常中断可能留下未引用文件，本轮不自动回收。
 
-内部 `context` 由模型适配器映射为靠近本轮输入的 system 消息，不伪装成用户陈述。每轮只生成一次快照，不写入长期历史；工具返回最新状态。同轮后续请求以追加消息延续，assistant/tool 配对完整保留。当前版本保留本会话完整历史，尚未增加长对话压缩。
+SQLite 保存使用修订检查；数据库失败保留内存并提示重试，旧实例不能覆盖新记录。空聊天仍是草稿，首次发送消息才进入聊天历史；案例、规范和模型设置不会制造空聊天。工作区文件可能在草稿阶段产生，但不会新增历史聊天行。
 
-固定提示词和工具定义不随参数或 skill 加载状态变化，这有利于稳定请求前缀，但不承诺供应商缓存命中。
+## 验证
 
-工具循环默认最多 6 个模型执行轮次，可通过 `agent.max_rounds` 配置；达到上限后追加明确的收尾说明；兼容适配器保留工具定义，并通过 `tool_choice="none"` 请求一次仅汇总已有证据的回答。此时状态为“已达工具轮次上限，可继续执行”，不会标为正常执行完成。原最小模型接口仍可回退为不带工具的最终请求。工具错误以统一结果反馈，允许模型继续；模型配置、网络及响应格式错误作为 `ModelError`，产生 `run_failed` 事件。请求失败前已完成的工具操作和配对历史保留。
-
-## Skill 渐进披露
-
-启动时发现两个 `SKILL.md` 的元数据并注册所有工具，模型初始只看到稳定目录。首次开展对应业务前，通过 `read_skill(name)` 按目录 id 读取说明；正文作为工具结果保留在本会话历史中。读取不改变工具 schema，不上传 Python 源码，也不增加“未读则禁止计算”的门禁。
-
-稳定工具列表共 10 项：
-
-| Skill | 工具 |
-|---|---|
-| 基础设施 | read_skill |
-| retaining_wall | set_parameters、validate_parameters、calculate_design、compare_designs、apply_option、get_current_result、list_cases、load_case |
-| standards | lookup_standard |
-
-新建对话会同时清空设计数据、模型历史和已读 skill 状态。没有 skill 搜索、重排序、动态安装或热更新。
-
-## 校验、成果和事件
-
-`validate_parameters` 与 `calculate_design` 复用 `check_parameters`，计算不依赖模型先调用校验。对话沿用原约定：8 项参数都要明确给出，无附加荷载须保存 q=0；独立调用原 `validate` / `calculate_wall` 仍兼容 q 缺省为 0。
-
-工具 schema 在运行时检查对象、必需字段、未知参数、数组、类型、枚举和数值上下限。统一返回：
-
-```json
-{"ok": true, "data": {}, "error": null}
-```
-
-或：
-
-```json
-{"ok": false, "data": null, "error": {"code": "INVALID_INPUT", "message": "说明"}}
-```
-
-错误码仅包括 `MISSING_INPUT`、`INVALID_INPUT`、`INVALID_STATE`、`EXECUTION_FAILED`。
-
-通用运行事件为 `run_started`、`model_started`、`model_reasoning`、`message_delta`、`model_finished`、`message_completed`、`tool_started`、`tool_finished`、`run_finished`、`run_failed`、`run_limit_reached`、`run_stopped`，携带本轮标识、Run 序号与耗时。业务层另发 `design_updated` 和 `artifact_created`。网页订阅同进程事件并实时展示正文；推理原文不发送到 UI 事件，只为供应商的工具循环协议保留在内部历史中。流式中断会保留已显示文本和已完成操作，未完整返回的工具不会执行。同轮先生成、后失效的临时成果不会作为最终卡片返回。
-
-结果 JSON 保持原核心字段，含输入、适用范围、计算步骤和待验算项。报告由确定性结果直接生成，与模型文字分开。
-
-## 计算、标准与数据边界
-
-沿用朗肯简化模型、原墙体重心公式、抗滑/抗倾覆、全底面或部分底面受压估算。几何搜索步长 0.1 m，底宽上限 10 m，以抗滑≥1.30、抗倾覆≥1.60及基底全接触作教学筛选；不包含真实造价。
-
-基准案例 H=4、B=2.4、t=0.5、γ=18、φ=30、γw=24、μ=0.55、q=0，结果为 Ea=48.0 kN/m、G=139.2 kN/m、Ks=1.595、Ko=3.4175。
-
-所选规范进入近输入的核算要求快照和计算报告：现有 GB 50330 抗滑/抗倾覆给出教学对照，其他规范要求明确为待补充资料、待验算。变更规范使当前结果和候选失效，历史报告保持原记录。不新增未经实现的公式或工程合规结论。
-
-SQLite 默认使用 `work/data/cases.sqlite3`，也可通过配置改变路径。更改路径会打开另一份案例库，不会自动搬迁原数据。聊天默认另存于 `work/data/conversations.sqlite3`，可用 `storage.conversations_database` / `CONVERSATIONS_DATABASE` 配置；与原案例表独立，不改动原案例数据。应用通过 `ConversationStore` 接口注入 SQLite 实现，单个事务保存完整快照。存储失败会提示，内存中的聊天仍可见。模型请求会发送对话、参数和工具结果给配置的服务，请勿输入涉密资料。
-
-数据库路径统一由 `src/config.py` 相对于项目根目录解析，与当前工作目录、适配器文件层级无关。本次移动代码没有移动业务数据库，也没有修改表结构或会话快照版本。保留原 `config.toml` 和存储环境变量即可继续访问原数据。直接构造 `DesignAgent(db_path=...)` 的兼容入口仍将该路径用于案例与会话两类表；需要分开存储时使用 `ProjectConfig.storage` 或注入 `ConversationStore`。
-
-`data/` 仅存放数据库及必要的持久化数据；备份应保留完整 SQLite 数据（若有 WAL/SHM 等配套文件也需一并考虑）。测试固定资源放在 `tests/fixtures/`，现有 `legacy_cases.json` 是算法回归基准。自动测试在 `tests/.runtime/` 下创建独立临时目录并在结束后清理；手动预览的数据库和截图写入 `tests/.runtime/visual/`。这些输出已加入 `.gitignore`，不能作为需要版本管理的夹具存放位置。
-
-原 `data/test-runtime/` 中的预览和浏览器脚本已迁入 `tests/manual/visual/`；既有测试数据库、截图、日志和浏览器目录保留在本机 `tests/.runtime/legacy/`，不作为正式测试输入。两个提交消息草稿对应的变更已记录在 Git 历史及 `docs/`，不属于业务数据，已删除。运行路径不再指向旧测试输出目录。
-
-## 扩展与验证
-
-新增领域能力时，将纯 Python 实现和说明放入对应 skill，在其 `tools.py` 声明 `Tool(name, description, schema, execute)`，返回统一结果，再由应用启动装配注册。执行函数可直接注册；只有访问当前会话、转换输入或统一错误时才适配。不要在通用 loop 中增加按业务工具名分支。
-
-新增模型供应商时实现 `Model` 协议，供应商消息映射及请求错误转换留在适配器内部。
-
-离线验证：
+使用项目虚拟环境运行：
 
 ```powershell
-python -m unittest discover -s tests -v
-python -m compileall -q src app.py launch.py
+.venv/Scripts/python.exe -X utf8 -m unittest discover -s tests -v
+.venv/Scripts/python.exe -m compileall -q src tests app.py launch.py
 ```
 
-测试使用假模型或模拟 HTTP，覆盖数值回归、工具协议、状态失效、会话保存/恢复及 Streamlit `AppTest` 交互，不访问真实模型服务。`test_storage_paths.py` 额外验证切换工作目录后的数据库路径、组合根装配、分离数据库的保存/恢复，以及由原始 SQL 建立的旧版会话快照可读写。所有测试写入隔离路径，不使用本机业务库；本机原数据库可另以 SQLite 只读连接检查完整性、表行数及迁移前后文件校验值。
+测试仅使用假模型与临时数据库。Windows 受限环境若在 asyncio socketpair 初始化处等待，需在允许本机回环连接的环境运行 Streamlit 页面测试。独立协议测试无需 Streamlit：
 
-手动假模型预览见 `tests/manual/visual/README.md`。其中部分浏览器脚本对应旧页面布局，仅作为历史调试资源；本次不声称已重新验证其选择器、桌面或窄屏视觉效果。真实模型端点、认证及在线工具调用需在本机完成配置后另行验证。
+```powershell
+python -m unittest discover -s tests -p test_skill_protocol.py -v
+```
 
-本次目录整理验证（2026-10-26）：56 项非页面测试通过；Windows 沙箱阻止本机回环连接后，11 项页面测试在允许本机连接的环境中重跑通过，共 67 项。编译检查、12 个浏览器脚本的 JavaScript 语法检查、真实入口的离线 `AppTest`、HTTP 健康检查和 5 个预览的启动检查通过；业务库与保留的测试库共 15 份数据库的迁移前后 SHA-256 一致。详细迁移与验证记录见 `docs/migration.md`。
+覆盖原算法基准、状态失效、候选、旧记录迁移、数据库失败、独立新增技能、协议错误、超时、非零退出、越界路径及过期提交。另有纯内存端口替换、应用禁止直接 I/O、递归依赖边界和模块依赖无环检查。人工假模型预览见 tests/manual/visual/README.md。
 
-许可证：MIT。
-
-
-## 多轮核算中断与继续
-
-`agent.max_rounds` 限制一轮用户请求可执行工具的模型轮数（默认 6），第 7 次请求仅收尾，不执行额外工具。达到上限会明确显示暂停，已修改参数与已完成工具保留；如果最后只修改参数而尚未计算，当前结果仍为无效，需要继续核算。发送“继续”可开启新一轮预算。
-
-DeepSeek 的 DSML 工具协议标记不应作为聊天正文返回。适配器会在流式分片期间识别这类异常，阻止原始标记进入显示或被误认为已执行工具；旧历史中的此类异常回复在再次发送给服务时转成明确的未执行说明，不直接修改数据库历史。
-
-现有 compare_designs 只按三项教学条件筛选候选，不包含任意自定义压力上限。额外限制必须用实际计算结果检查；明确获准连续试算时，模型可在同一请求内依次调用改参和计算，减少轮次开销。
+本地技能是可信 Python 代码，进程启动与协议限制不构成操作系统安全沙箱。不支持任意代码生成、远程插件安装或热加载。真实模型认证和在线服务行为应单独验证，离线测试不声称覆盖它们。

@@ -1,3 +1,62 @@
+# 应用宿主归属与依赖倒置（2026-10-26）
+
+本节描述当前目录，后续各节保留当时的迁移记录。详细接口与依赖图见 [architecture.md](architecture.md)。
+
+- 顶层 src/runtime 已移除，技能编排和协议归 design_agent/skills，状态外壳和提交规则归 design_agent/workspace；子进程、SQLite、目录发现和文件操作归 design_agent/infrastructure。
+- agent/skills.py 的本地目录发现移入 LocalSkillCatalog，模型工具注册交给应用服务。严格 JSON 编解码移入 agent/serialization.py，Agent 内核不再反向依赖宿主。
+- design_agent/ports.py 定义五类接口和 ApplicationPorts；应用与提交策略只使用接口，bootstrap 创建并注入本地实现。
+- 原 design_agent/persistence/sqlite.py 移入 infrastructure/sqlite_conversations.py；conversations.py 的接口并入 ports.py；session.py 的转发模块移除，StateEnvelope 在 workspace/models.py 定义。
+- 普通构造入口改为 bootstrap.create_agent(model=..., config=..., db_path=...)。需要直接构造 DesignAgent 时显式提供 model、config、ports。所有本地预览与测试调用点已同步。
+- 协议版本、状态载荷、数据库表结构、数据库位置、会话目录哈希算法、附件文件引用和业务规则均不变，无需新增数据迁移。
+- 新增纯内存端口替换测试、策略无直接文件 I/O 检查、旧目录移除检查及生产模块依赖无环检查；原有业务、协议、故障及界面断言继续保留。
+
+本次验证：89 项离线测试全部通过，包含 5 项禁止本地 I/O 的纯内存端口测试、4 项依赖边界检查及原有 12 项界面测试。编译、JavaScript 语法和差异空白检查通过。
+
+使用实际业务数据库的隔离副本恢复全部 4 条版本 2 会话，分别核验 2、2、14、2 条消息及每条会话 2 个报告附件，保存后再次载入，状态和消息一致。原始两份数据库 SHA-256 与本轮开始时相同。旧版本 1 SQL 夹具、历史报告和候选恢复测试仍通过。本轮不调用真实模型端点，也不更改工程公式或数据格式。
+
+## 计算书展开与输入框滚动冲突修复（2026-10-26）
+
+- 将输入框放入显式 st.bottom，避免根级自动定位输入框启动的全页追底机制在展开/切换计算书时接管阅读位置。
+- 正文与底部输入区域不参与高度收缩，正文关闭浏览器自动滚动锚定。报告仍使用自然页面滚动，不增加嵌套滚动区域。
+- 新增本地静态滚动控制脚本：生成回答时跟随；主动上滚、点击报告/章节或键盘上翻即停止跟随，生成结束保留阅读位置。脚本不读取业务字段，不嵌入模型或用户文本。
+- 最低 Streamlit 版本更新为已验证的 1.66，以使用显式底部区域和本地 JavaScript 执行接口。
+- 12 项原有页面测试通过；实际浏览器在 1440×900、3323×1787、390×844 下验证展开、章节切换、滚轮、底部输入框和末尾内容可达，并验证流式跟随与主动阅读暂停。复现页面及断言脚本见 tests/manual/visual/README.md。
+
+# 当前迁移说明：脚本型 Skills 与状态所有权（2026-10-26）
+
+本节是当前架构；后文保留此前迁移记录作为历史。完整边界、输入输出示例和编写指南分别见 [architecture.md](architecture.md)、[skill-protocol.md](skill-protocol.md)、[skill-authoring.md](skill-authoring.md)。
+
+## 本轮变更
+
+- 模型工具从原来的逐业务注册改为四个稳定的通用工具。普通业务操作通过 run_skill_action(skill_id, action_id, input) 执行。
+- 业务数据模型、完整校验、参数来源、尺寸保护、规范目录、状态失效、候选和报告均由挡墙业务包负责。DesignAgent 和界面只使用通用外壳与描述协议。
+- wall_design 是完整设计状态的唯一所有者；standards 无状态，仅消费显式 StandardContextV1。reading_list 展示同一聊天中的独立状态所有权。
+- SQLite、进程、文件和执行日志由基础设施处理。业务脚本不读写对话数据库，不导入宿主或相邻技能。
+- 对话支持工具批次恢复检查点及 SQLite 修订检查；脚本/协议失败不提交状态；写入失败保留完整内存并允许重试保存。
+
+## 数据升级与旧接口
+
+原 cases、teaching_presets、conversations 表和数据库位置保留。只读载入版本 1 聊天时，将旧 session 和旧消息成果交给配置的 legacy_owner 恢复；只有校验成功才切换当前会话。载入本身不重写旧行。下一次正常保存产生版本 2 workspace，原消息正文、模型历史、trace 和精确报告下载内容保留。
+
+旧案例行按清单声明读取，由挡墙脚本解释；首次保存新案例时，使用附加 skill_documents 表导入旧文档并保存新文档，原表不清空，旧 ID 和创建时间保留。重复导入同一文档不覆盖内容。
+
+旧 read_session、wall、commit_parameters、select_standards 等宿主业务接口移除。应用集成改用 state_snapshot(owner)、application_view()、execute_action(skill_id, action_id, input)、current_artifacts() 和 artifact_bytes()。业务数值通过自己的脚本 action 或成果证据读取。tests/support.py 仅帮助旧行为断言使用新协议，不参与生产注册。
+
+首次升级前建议备份两个数据库及其 SQLite 配套文件。升级后还须备份 skills.workspace（默认 data/workspace），其中包含新成果附件；不要仅复制数据库。未知业务数据版本或损坏记录会拒绝载入，当前内存不变。未引用文件本轮不自动清理。
+
+## 验证记录
+
+- 原算法及全部几何搜索夹具保持逐项相等；源公式和搜索实现没有改动。
+- 原 67 项回归迁移至通用协议，新增独立技能、故障协议、旧计算书及无状态成果回归，当前共 81 项。完整 80 项先通过，补充无状态成果用例与相关回归、最终 12 项界面测试分别复核。
+- 测试覆盖说明型技能、缺失入口和解释器、重复标识、非法路径/JSON、重复键、非有限数值、业务校验、超时、输出超限、非零退出、过期修订、跨会话响应、数据库失败及多实例冲突。
+- 使用实际业务库的隔离副本恢复全部 3 条旧聊天（分别 4、6、2 条消息，2、1、1 项历史成果），保存新格式并重新载入，逐一读取附件。两份原始数据库 SHA-256 未变，副本完整性均为 ok。
+- 实际无头 Edge 验证流式正文、业务阶段、两个下载按钮和真正下载的 JSON（抗滑 1.595、抗倾覆 3.4174999999999995）。1440px 桌面及 390px 页面无异常、无水平溢出；截图与机器结果位于本机忽略的 tests/.runtime/visual/architecture。
+- 编译与差异空白检查通过。页面测试需要本机回环连接；受限 Windows 环境的 socketpair 阻塞已定位，界面测试在允许本机连接的环境执行。
+
+未调用真实模型服务，没有验证在线认证、模型发现或真实模型的技能选择。本地脚本是可信代码，执行限制不等于安全沙箱。案例库与聊天库没有跨库事务；数据库和成果文件需一起备份。没有新增工程公式或规范合规结论。
+
+---
+
 # 架构迁移记录
 
 ## 迁移前基准（阶段 A）
@@ -67,7 +126,7 @@ Windows 沙箱阻止事件循环内部的本地套接字连接，网页测试及
 
 ## 流式交互与会话持久化（2026-10-25）
 
-- 保留模型、通用运行、设计业务、Streamlit 四层；新增应用定义的 `ConversationStore` 接口和 SQLite 实现（当前路径为 `src/design_agent/persistence/sqlite.py`）。`bootstrap.py` 作为组合根注入模型与存储；保留原构造入口的兼容默认装配。
+- 保留模型、通用运行、设计业务、Streamlit 四层；新增应用定义的 `ConversationStore` 接口和 SQLite 实现（当时路径为 `src/design_agent/persistence/sqlite.py`）。`bootstrap.py` 作为组合根注入模型与存储；保留原构造入口的兼容默认装配。
 - 模型适配器通过 SSE 增量返回正文，完整拼接工具参数后才执行；支持心跳、多工具分片、结束原因校验、断流及错误事件。模型推理原文仅保留在内部协议历史，UI 只收到思考活动通知。
 - Run 编号、关联标识、工具调用标识与耗时进入通用执行事件。等待区采用暖色旋转/呼吸符号和实际阶段提示，支持减少动态效果偏好。
 - 模型发现采用认证 GET `/models`，优先读取 `effort.supported_levels`，已知模型族提供保守回退，未知模型不猜测参数。提供思考值映射覆盖与刷新入口，兼容旧 DeepSeek 环境变量。

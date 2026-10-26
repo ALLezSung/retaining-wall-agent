@@ -45,6 +45,14 @@ class StorageConfig:
     conversations_database: Path = DEFAULT_CONVERSATIONS_DATABASE
 
 
+@dataclass(frozen=True)
+class SkillsConfig:
+    directories: tuple[Path, ...] = (PROJECT_DIR / "src" / "skills",)
+    workspace: Path = PROJECT_DIR / "data" / "workspace"
+    default_skill: str = "retaining_wall"
+    legacy_owner: str = "wall_design"
+
+
 def _text(value, name: str, *, allow_empty: bool = False) -> str:
     if not isinstance(value, str) or (not value.strip() and not allow_empty):
         raise ConfigError(f"配置 {name} 必须是{'可为空的' if allow_empty else '非空'}字符串。")
@@ -92,6 +100,7 @@ class ProjectConfig:
     llm: ModelConfig = field(default_factory=ModelConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
+    skills: SkillsConfig = field(default_factory=SkillsConfig)
 
     @classmethod
     def load(cls, path: Path | None = None, *, environ: Mapping[str, str] | None = None) -> "ProjectConfig":
@@ -109,7 +118,8 @@ class ProjectConfig:
 
         allowed = {"llm": {"api_key", "model", "base_url", "timeout_seconds", "max_tokens",
                            "reasoning_effort", "reasoning_overrides"},
-                   "agent": {"max_rounds"}, "storage": {"cases_database", "conversations_database"}}
+                   "agent": {"max_rounds"}, "storage": {"cases_database", "conversations_database"},
+                   "skills": {"directories", "workspace", "default_skill", "legacy_owner"}}
         for section, values in document.items():
             if section not in allowed or not isinstance(values, dict):
                 raise ConfigError("config.toml 包含未知配置分组或分组格式不正确。")
@@ -151,4 +161,14 @@ class ProjectConfig:
         conversations = Path(_text(setting("storage", "conversations_database", "CONVERSATIONS_DATABASE", "data/conversations.sqlite3"), "storage.conversations_database"))
         if not conversations.is_absolute():
             conversations = PROJECT_DIR / conversations
-        return cls(llm, agent, StorageConfig(database.resolve(), conversations.resolve()))
+        skills = document.get("skills", {})
+        directories = skills.get("directories", ["src/skills"])
+        if not isinstance(directories, list) or not directories or not all(isinstance(p, str) and p.strip() for p in directories):
+            raise ConfigError("skills.directories 必须是非空路径列表。")
+        def resolve(p):
+            path = Path(p)
+            return (PROJECT_DIR / path).resolve() if not path.is_absolute() else path.resolve()
+        return cls(llm, agent, StorageConfig(database.resolve(), conversations.resolve()), SkillsConfig(
+            tuple(resolve(p) for p in directories), resolve(_text(skills.get("workspace", "data/workspace"), "skills.workspace")),
+            _text(skills.get("default_skill", "retaining_wall"), "skills.default_skill"),
+            _text(skills.get("legacy_owner", "wall_design"), "skills.legacy_owner")))

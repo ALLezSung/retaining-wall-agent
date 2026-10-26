@@ -5,28 +5,24 @@ import json
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from uuid import uuid4
 
 from ..config import ProjectConfig
 from ..agent.events import Event, EventSink
 from ..agent.loop import AgentLoop
-from ..agent.skills import SkillCatalog
-from ..agent.tools import ToolRegistry, ToolError
+from ..agent.tools import ToolRegistry, RUN_CONTEXT
 from ..llm.protocol import Message, Model, ModelError, ModelInfo, ToolCall
-from ..skills.retaining_wall.report import book_sections, calculation_markdown, standards_markdown, summary_markdown
-from ..skills.retaining_wall.tools import WallTools, protected_dimensions
-from ..skills.standards.index import STANDARDS, selected_standard_report
-from ..skills.standards.tools import tools as standard_tools
-from .session import DesignSession
-from .conversations import ConversationStore
+from .errors import CapabilityError
+from .ports import ApplicationPorts
+from .skills.capabilities import Capabilities
+from .workspace.models import StateEnvelope
 
 
-SYSTEM_IDENTITY = """你是设计任务的对话助手，使用本地工具提供可复核的结果。自然回应用户，通常用2到5句中文，表格由界面展示。
-只使用用户明确给出的条件，不猜测参数；工程数字、方案和覆盖结论必须来自工具证据。条件不足时追问，工具失败时解释下一步，不把教学结果说成完整工程设计。
-下列是可用 skill 的稳定目录。首次开展相应业务前，使用 read_skill 按 id 读取完整说明；同一会话已读取的说明在历史中，无需重复添加。工具启动时已注册，读取说明不会改变工具列表。
-临近本轮输入的内部上下文是应用权威状态的快照，不是用户亲口陈述；本轮以工具返回的更新状态为准。
-核算时必须考虑所选规范的已实现校核和待补充要求；未覆盖的项目明确列为待验算，不能宣称全面合规。"""
+SYSTEM_IDENTITY = """你是使用本地技能完成任务的对话助手，通常用2到5句中文回应，表格和成果由界面展示。
+只使用用户明确提供的条件，不猜测输入。数值和完成结论必须来自执行证据。条件不足时追问；失败或尚未持久化时如实说明。
+首次开展相关业务前按目录 id 调用 read_skill，遵循技能说明，通过 run_skill_action 提供本次输入。
+临近用户输入的上下文由各状态所有者提供，是权威快照的投影；本轮以工具的新结果为准。不得自行构造、覆盖或提交权威快照。
+成果默认只有摘要，需要内容时使用 read_artifact。技能目录启动时固定；读取说明不改变工具定义。"""
 
 
 @dataclass(frozen=True)
@@ -41,15 +37,9 @@ class DesignTurn:
 
 
 class DesignAgent:
-    def __init__(self, model: Model | None = None, *, db_path: Path | None = None,
-                 event_sink: EventSink | None = None, max_rounds: int | None = None,
-                 config: ProjectConfig | None = None,
-                 conversation_store: ConversationStore | None = None):
-        config = config or ProjectConfig.load()
-        # Defaults are assembled by the composition root; runtime uses only ports.
-        from ..bootstrap import configured_model, conversation_store as default_store
-        self._conversations = conversation_store if conversation_store is not None else default_store(
-            db_path if db_path is not None else config.storage.conversations_database)
+    def __init__(self, model: Model, *, ports: ApplicationPorts, config: ProjectConfig,
+                 event_sink: EventSink | None = None, max_rounds: int | None = None):
+        self._conversations = ports.conversations
         self._messages: list[dict] = []
         self._conversation_saved = False
         self._turn_sink: EventSink | None = None
@@ -57,42 +47,78 @@ class DesignAgent:
         self._model_choices: list[ModelInfo] | None = None
         self.model_discovery_error = ""
         self.persistence_error = ""
+        self.persistence_code = ""
         self.conversation_id = uuid4().hex
         self.created_at = datetime.now(timezone(timedelta(hours=8))).isoformat(timespec="seconds")
         self.conversation_title = datetime.fromisoformat(self.created_at).strftime("%Y-%m-%d %H:%M:%S")
-        self._session = DesignSession()
+        self.config = config
+        self._storage_revision = None
         self._events: list[Event] = []
-        self._turn_artifacts: dict = {}
         self._event_sink = event_sink
-        self.protected_dimensions: set[str] = set()
-        self.catalog = SkillCatalog(Path(__file__).resolve().parents[1] / "skills")
-        self.wall = WallTools(self, db_path if db_path is not None else config.storage.cases_database)
+        self.catalog = ports.catalog
+        self.capabilities = Capabilities(ports.catalog, ports.executor, ports.resources, ports.artifacts,
+                                         self.conversation_id, self._emit)
+        self.capabilities.initialize()
         registry = ToolRegistry()
-        registry.register(self.catalog.tool())
-        for tool in [*self.wall.definitions(), *standard_tools(lambda: self.read_session().selected_standards)]:
+        for tool in self.capabilities.tools():
             registry.register(tool)
         prompt = SYSTEM_IDENTITY + "\n" + json.dumps(self.catalog.directory(), ensure_ascii=False)
-        self.loop = AgentLoop(model if model is not None else configured_model(config.llm), registry, prompt,
+        self.loop = AgentLoop(model, registry, prompt,
                               self.context_snapshot, self._emit,
-                              max_rounds if max_rounds is not None else config.agent.max_rounds)
+                              max_rounds if max_rounds is not None else config.agent.max_rounds,
+                              checkpoint=self._checkpoint)
         self._persist()
 
     @property
     def model_configured(self) -> bool:
         return getattr(self.loop.model, "configured", True)
 
-    def read_session(self) -> DesignSession:
-        """Consumers get copies; all authoritative mutations use application methods."""
-        return deepcopy(self._session)
+    @property
+    def workspace(self):
+        return self.capabilities.workspace
 
     @property
     def max_runs(self) -> int:
         return self.loop.max_rounds + 1
 
-    def parameter_table(self) -> str:
-        from ..skills.retaining_wall.models import FIELD_LABELS
-        return "| 参数 | 当前值 |\n|---|---:|\n" + "\n".join(
-            f"| {label} | {self._session.parameters.get(key, '待补充')} |" for key, label in FIELD_LABELS.items())
+    def state_snapshot(self, owner: str) -> dict:
+        return deepcopy(self.workspace.snapshot(owner))
+
+    def application_view(self, skill_id: str | None = None) -> dict:
+        return self.capabilities.view(skill_id or self.config.skills.default_skill)
+
+    def execute_action(self, skill_id: str, action_id: str, input: dict, *, new_conversation=False) -> dict:
+        if new_conversation:
+            self.reset()
+        token = RUN_CONTEXT.set({"source": "interface", "user_text": "", "operation_id": uuid4().hex})
+        try:
+            output = self.capabilities.run_skill_action(skill_id, action_id, input)
+        finally:
+            RUN_CONTEXT.reset(token)
+        if output["ok"]:
+            self._persist()
+        return output
+
+    def artifact_bytes(self, attachment: dict) -> bytes:
+        return self.workspace.attachment_bytes(attachment)
+
+    def supplementary_views(self) -> dict:
+        used = {op["skill_id"] for op in self.workspace.operations
+                if op["action_id"] in self.catalog.get(op["skill_id"]).manifest.get("actions", {})}
+        return {skill: self.application_view(skill) for skill in sorted(used) if skill != self.config.skills.default_skill}
+
+    def _checkpoint(self):
+        """Persist a complete tool batch with a recoverable interrupted message."""
+        if not self._messages or self._messages[-1]["role"] != "user":
+            return
+        self._messages.append({"role": "assistant", "content": "上次执行在工具批次完成后中断，可继续对话。",
+                               "failed": True, "trace": [deepcopy(e.data) for e in self._events if e.name == "tool_finished"],
+                               "artifacts": self.current_artifacts(),
+                               "events": [{"event": e.name, **e.data} for e in self._events]})
+        try:
+            self._persist()
+        finally:
+            self._messages.pop()
 
     def _emit(self, event: Event) -> None:
         if event.name == "model_started":
@@ -189,17 +215,24 @@ class DesignAgent:
         if not self._conversation_saved and not self._messages:
             self.persistence_error = ""
             return True
+        next_revision = uuid4().hex
         try:
             self._conversations.save(self.conversation_id, self.conversation_title, self.created_at, {
-                "session": asdict(self._session), "messages": self._messages,
+                "version": 2, "workspace": self.workspace.serialize(), "messages": self._messages,
+                "expected_revision": self._storage_revision, "storage_revision": next_revision,
+                "execution_logs": self.capabilities.logs,
                 "history": [asdict(message) for message in self.loop.history],
                 "loaded_skills": sorted(self.catalog.loaded),
                 "model": self.current_model().id, "reasoning_effort": self.reasoning_effort,
             })
             self._conversation_saved = True
+            self._storage_revision = next_revision
             self.persistence_error = ""
-        except (RuntimeError, OSError, ValueError):
-            self.persistence_error = "本次对话尚未保存成功，请检查对话数据库路径与文件权限。"
+            self.persistence_code = ""
+        except (RuntimeError, OSError, ValueError) as exc:
+            self.persistence_code = getattr(exc, "code", "PERSISTENCE_FAILED")
+            self.persistence_error = ("对话已由其他实例更新，内存内容仍保留；未覆盖数据库记录。" if self.persistence_code == "STALE_STATE"
+                                      else "本次对话尚未保存成功，请检查对话数据库路径与文件权限。")
         return not self.persistence_error
 
     def load_conversation(self, identifier: str) -> None:
@@ -207,164 +240,96 @@ class DesignAgent:
             raise RuntimeError(self.persistence_error + " 当前对话仍保留在内存，暂未切换。")
         record = self._conversations.load(identifier)
         payload = record["payload"]
+        candidate = self.capabilities.for_session(identifier, lambda event: None)
         try:
-            session = DesignSession(**payload["session"])
-            selected_standard_report(session.selected_standards)
-            history = [Message(**{**message, "tool_calls": tuple(ToolCall(**call) for call in message.get("tool_calls", []))})
-                       for message in payload["history"]]
             messages = deepcopy(payload["messages"])
-            if not isinstance(messages, list):
+            if not isinstance(messages, list) or not all(isinstance(m, dict) and isinstance(m.get("content"), str) and m.get("role") in {"user", "assistant"} for m in messages):
                 raise ValueError("invalid transcript")
-        except (KeyError, TypeError, ValueError) as exc:
+            history = [Message(**{**m, "tool_calls": tuple(ToolCall(**c) for c in m.get("tool_calls", []))}) for m in payload["history"]]
+            if payload.get("version") == 2:
+                candidate.workspace.restore(payload["workspace"])
+                for owner in list(candidate.workspace.states):
+                    if owner not in self.catalog.owners:
+                        raise ValueError("状态所有者技能不可用。")
+                    candidate.lifecycle(owner, "restore")
+            else:
+                owner = self.config.skills.legacy_owner
+                candidate.lifecycle(owner, "restore", {"legacy_state": payload["session"]})
+                for message in messages:
+                    old = message.get("artifacts")
+                    if old:
+                        converted = self.capabilities.for_session(identifier, lambda event: None)
+                        converted.lifecycle(owner, "restore", {"legacy_artifacts": old})
+                        message["artifacts"] = {"items": [converted.workspace.read_artifact(ref) for ref in converted.workspace.turn_refs]}
+                        candidate.workspace.artifacts.update(converted.workspace.artifacts)
+            candidate.initialize()
+        except (KeyError, TypeError, ValueError, RuntimeError) as exc:
             raise ValueError("对话记录损坏或格式不兼容，未切换当前对话。") from exc
-        self._session, self.loop.history, self._messages = session, history, messages
+        self.capabilities.workspace = candidate.workspace
+        self.capabilities.logs = deepcopy(payload.get("execution_logs", []))
+        self.loop.history, self._messages = history, messages
         self.catalog.loaded = set(payload.get("loaded_skills", [])) & set(self.catalog.entries)
         self.conversation_id, self.conversation_title = identifier, record["title"]
+        self._storage_revision = payload.get("storage_revision", "legacy")
         self._conversation_saved = True
         self.created_at = record["created_at"]
-        self._turn_artifacts.clear()
         self._events.clear()
-        self.protected_dimensions.clear()
         select = getattr(self.loop.model, "select_model", None)
         if select and payload.get("model"):
             try:
                 select(payload["model"], payload.get("reasoning_effort", "default"))
             except ValueError:
                 select(payload["model"], "default")
-        self._persist()
 
     def delete_conversation(self, identifier: str) -> None:
+        if identifier == self.conversation_id and self.persistence_error:
+            raise RuntimeError(self.persistence_error + " 未保存内容仍保留在内存。")
         if identifier != self.conversation_id or self._conversation_saved:
             self._conversations.delete(identifier)
         if identifier == self.conversation_id:
             self.reset(save_current=False)
 
-    def _updated(self) -> None:
-        self._emit(Event("design_updated", {
-            "current_parameters": deepcopy(self._session.parameters),
-            "has_calculated_result": self._session.current_result is not None,
-            "has_options": self._session.pending_options is not None,
-            "wall_shape": self._session.wall_shape,
-        }))
-
-    def commit_parameters(self, values: dict, sources: dict, shape: str | None,
-                          *, replace: bool = False) -> None:
-        session = self._session
-        values = deepcopy(values)
-        changed = values != session.parameters or shape != session.wall_shape
-        session.parameters = values
-        session.parameter_sources = deepcopy(sources) if replace else {**session.parameter_sources, **deepcopy(sources)}
-        session.wall_shape = shape
-        if changed or replace:
-            session.current_result = None
-            session.pending_options = None
-            self._turn_artifacts.clear()
-        self._updated()
-
-    def store_result(self, result: dict) -> None:
-        if result["input"] != self._session.parameters:
-            raise ToolError("INVALID_STATE", "计算结果与当前参数不一致。")
-        self._session.current_result = deepcopy(result)
-        self._turn_artifacts["result"] = deepcopy(result)
-        self._updated()
-        self._emit(Event("artifact_created", {"kind": "result", "artifact": deepcopy(result)}))
-
-    def store_options(self, optimization: dict) -> None:
-        self._session.pending_options = deepcopy(optimization)
-        self._turn_artifacts["optimization"] = deepcopy(optimization)
-        self._updated()
-        self._emit(Event("artifact_created", {"kind": "optimization", "artifact": deepcopy(optimization)}))
-
     def context_snapshot(self) -> dict:
-        session = self._session
-        return {"current_parameters": deepcopy(session.parameters),
-                "wall_shape": session.wall_shape,
-                "has_calculated_result": session.current_result is not None,
-                "result_summary": {key: session.current_result[key] for key in (
-                    "sliding_ratio", "overturning_ratio", "base_contact")} if session.current_result else None,
-                "last_options": deepcopy((session.pending_options or {}).get("alternatives", [])),
-                "selected_standards": list(session.selected_standards),
-                "standard_requirements": selected_standard_report(session.selected_standards),
-                "loaded_skills": sorted(self.catalog.loaded)}
-
-    def select_standards(self, selected: list[str]) -> None:
-        selected_standard_report(selected)  # Skill owns identifier validation.
-        if self._session.selected_standards == selected:
-            return
-        self._session.selected_standards = list(selected)
-        # A result computed against another set of requirements is no longer current.
-        self._session.current_result = None
-        self._session.pending_options = None
-        self._turn_artifacts.clear()
-        self._persist()
-
-    def standard_choices(self) -> list[str]:
-        return list(STANDARDS)
+        return self.capabilities.context()
 
     def reset(self, *, save_current: bool = True) -> None:
         if save_current and not self._persist():
             raise RuntimeError(self.persistence_error + " 当前对话仍保留在内存，暂未新建。")
-        self._session = DesignSession(selected_standards=list(self._session.selected_standards))
-        self.conversation_id = uuid4().hex
+        identifier = uuid4().hex
+        candidate = self.capabilities.for_session(identifier, lambda event: None)
+        # The owner decides what preferences survive a new conversation.
+        for owner, state in self.workspace.states.items():
+            candidate.workspace.states[owner] = StateEnvelope(identifier, owner, data_version=state.data_version, payload=deepcopy(state.payload))
+            candidate.lifecycle(owner, "reset")
+        candidate.initialize()
+        self.capabilities.workspace = candidate.workspace
+        self.capabilities.logs.clear()
+        self.conversation_id = identifier
+        self._storage_revision = None
         self._conversation_saved = False
         self.created_at = datetime.now(timezone(timedelta(hours=8))).isoformat(timespec="seconds")
         self.conversation_title = datetime.fromisoformat(self.created_at).strftime("%Y-%m-%d %H:%M:%S")
         self._messages.clear()
         self.loop.reset()
         self.catalog.loaded.clear()
-        self.protected_dimensions.clear()
-        self._turn_artifacts.clear()
         self._events.clear()
-        self._updated()
-        self._persist()
-
-    def teaching_cases(self) -> list[dict]:
-        return self.wall.teaching_cases()
-
-    def saved_cases(self) -> list[dict]:
-        return self.wall.saved_cases()
-
-    def load_teaching_case(self, title: str) -> dict:
-        output = self.wall.load_case(title)
-        self._persist()
-        return output
-
-    def load_saved_case(self, case_id: int) -> dict:
-        output = self.wall.load_saved(case_id)
-        self._persist()
-        return output
-
-    def save_case(self, title: str) -> int:
-        return self.wall.save_current(title)
-
-    @staticmethod
-    def present_result(result: dict) -> dict:
-        summary = summary_markdown(result)
-        calculation = calculation_markdown(result)
-        standards = standards_markdown(result)
-        return {"summary": summary, "calculation": calculation, "standards": standards,
-                "sections": book_sections(result),
-                "markdown": summary + "\n\n" + calculation + "\n\n### 规范覆盖\n" + standards,
-                "json": json.dumps(result, ensure_ascii=False, indent=2)}
+        self.persistence_error = ""
 
     def current_artifacts(self) -> dict:
-        artifacts = deepcopy(self._turn_artifacts)
-        if "result" in artifacts:
-            artifacts["report"] = self.present_result(artifacts["result"])
-        return artifacts
+        items = [self.workspace.read_artifact(ref) for ref in self.workspace.turn_refs]
+        return {"items": items} if items else {}
 
     def chat(self, text: str, *, event_sink: EventSink | None = None) -> DesignTurn:
         self._events.clear()
-        self._turn_artifacts.clear()
+        self.workspace.turn_refs.clear()
         self._partial_segments.clear()
         self._turn_sink = event_sink
         self._messages.append({"role": "user", "content": text})
-        self.protected_dimensions = protected_dimensions(text)
         try:
             result = self.loop.run(text)
             turn = DesignTurn(result.content, result.trace, self.current_artifacts(), deepcopy(self._events),
                               stop_reason=result.stop_reason, run_messages=result.run_messages)
-        except ModelError as exc:
+        except (ModelError, CapabilityError) as exc:
             trace = [deepcopy(event.data) for event in self._events if event.name == "tool_finished"]
             notes = [{"run": event.data["run"], "content": event.data["content"].strip()}
                      for event in self._events if event.name == "model_finished"
@@ -375,7 +340,6 @@ class DesignAgent:
             turn = DesignTurn((partial + "\n\n" if partial else "") + content,
                               trace, self.current_artifacts(), deepcopy(self._events), failed=True, run_messages=notes)
         finally:
-            self.protected_dimensions.clear()
             self._turn_sink = None
         self._messages.append({"role": "assistant", "content": turn.content, "trace": turn.trace,
                                "artifacts": turn.artifacts, "failed": turn.failed,

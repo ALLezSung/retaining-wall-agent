@@ -1,0 +1,35 @@
+id = "retaining_wall"
+protocol_version = 1
+entry = "runner.py"
+owner = "wall_design"
+resource_namespace = "wall_cases"
+legacy_tables = ["cases", "teaching_presets"]
+
+[lifecycle]
+initialize = "initialize"
+restore = "restore"
+project = "project"
+reset = "reset"
+
+[actions.set_parameters]
+label = "更新参数表"
+[actions.validate_parameters]
+label = "校验参数"
+[actions.calculate_design]
+label = "计算当前方案"
+[actions.compare_designs]
+label = "比选方案"
+[actions.apply_option]
+label = "选用方案"
+[actions.get_current_result]
+label = "读取计算结果"
+[actions.list_cases]
+label = "查询案例"
+[actions.load_case]
+label = "载入案例"
+[actions.load_saved]
+label = "载入保存案例"
+[actions.save_current]
+label = "保存案例"
+[actions.select_standards]
+label = "选择核算规范"

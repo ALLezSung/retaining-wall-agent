@@ -1,0 +1,53 @@
+"""Application-owned contracts. Implementations are chosen by bootstrap only."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Protocol
+from .skills.catalog import SkillEntry
+
+
+class ConversationStore(Protocol):
+    """save atomically compares expected_revision and stores the entire snapshot."""
+    def save(self, identifier: str, title: str, created_at: str, payload: dict) -> None: ...
+    def recent(self, limit: int | None = 5) -> list[dict]: ...
+    def rename(self, identifier: str, title: str) -> None: ...
+    def load(self, identifier: str) -> dict: ...
+    def delete(self, identifier: str) -> None: ...
+
+
+class SkillCatalog(Protocol):
+    entries: dict[str, SkillEntry]
+    owners: dict[str, SkillEntry]
+    loaded: set[str]
+
+    def directory(self) -> list[dict]: ...
+    def get(self, identifier: str) -> SkillEntry: ...
+    def read_skill(self, name: str) -> dict: ...
+    def read_resource(self, skill_id: str, path: str) -> dict: ...
+
+
+class SkillExecutor(Protocol):
+    """Transport only: return decoded JSON plus a separate bounded execution log."""
+    def execute(self, entry: SkillEntry, request: dict) -> tuple[Any, dict]: ...
+
+
+class ResourceRepository(Protocol):
+    def snapshot(self, namespace: str, legacy_tables: list[str] | tuple = ()) -> dict: ...
+    def commit(self, namespace: str, proposals: list[dict]) -> None: ...
+
+
+class ArtifactStore(Protocol):
+    """Keep session paths and attachment bytes outside application policies."""
+    def create_stage(self, session_id: str, request_id: str) -> str: ...
+    def register(self, session_id: str, stage: str, artifacts: dict[str, dict]) -> dict[str, dict]: ...
+    def read_attachment(self, session_id: str, attachment: dict) -> bytes: ...
+    def discard_stage(self, session_id: str, stage: str) -> None: ...
+
+
+@dataclass(frozen=True)
+class ApplicationPorts:
+    conversations: ConversationStore
+    catalog: SkillCatalog
+    executor: SkillExecutor
+    resources: ResourceRepository
+    artifacts: ArtifactStore

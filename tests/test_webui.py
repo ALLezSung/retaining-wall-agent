@@ -8,7 +8,8 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
-from src.design_agent import DesignAgent
+from src.bootstrap import create_agent
+from support import business, business_artifacts, BusinessRegistry, skill_call, wire_action
 from src.llm.protocol import ModelDelta, ModelInfo, ModelResponse, ToolCall
 from src.agent.events import Event
 from src.webui.app import LiveTurn
@@ -20,15 +21,15 @@ ROOT = Path(__file__).resolve().parents[1]
 class PageModel:
     def __init__(self):
         self.responses = deque([
-            ModelResponse(tool_calls=(ToolCall("read", "read_skill", '{"name":"retaining_wall"}'),
-                                      ToolCall("check", "validate_parameters", "{}"),
-                                      ToolCall("calc", "calculate_design", "{}"))),
+            ModelResponse(tool_calls=(skill_call("read", "read_skill", '{"name":"retaining_wall"}'),
+                                      skill_call("check", "validate_parameters", "{}"),
+                                      skill_call("calc", "calculate_design", "{}"))),
             ModelResponse("教学初算完成。"),
-            ModelResponse(tool_calls=(ToolCall("compare", "compare_designs", '{"fixed_dimensions":["top_width_m"]}'),)),
+            ModelResponse(tool_calls=(skill_call("compare", "compare_designs", '{"fixed_dimensions":["top_width_m"]}'),)),
             ModelResponse("候选已生成。"),
-            ModelResponse(tool_calls=(ToolCall("pick", "apply_option", '{"index":1}'),)),
+            ModelResponse(tool_calls=(skill_call("pick", "apply_option", '{"index":1}'),)),
             ModelResponse("已选用并重算。"),
-            ModelResponse(tool_calls=(ToolCall("edit", "set_parameters", '{"height_m":4.2}'),)),
+            ModelResponse(tool_calls=(skill_call("edit", "set_parameters", '{"height_m":4.2}'),)),
             ModelResponse("已修改，请重新计算。"),
         ])
 
@@ -37,6 +38,29 @@ class PageModel:
 
 
 class WebUITests(unittest.TestCase):
+    def test_unrelated_skill_uses_generic_artifact_renderer(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / "tests/.runtime") as directory:
+            model = PageModel()
+            model.responses = deque([
+                ModelResponse(tool_calls=(ToolCall("book", "run_skill_action", '{"skill_id":"reading_list","action_id":"add","input":{"title":"算法导论"}}'),)),
+                ModelResponse("已添加书目。")])
+            agent = create_agent(model, db_path=Path(directory) / "books.sqlite3")
+            page = AppTest.from_file(ROOT / "app.py", default_timeout=20)
+            page.session_state["design_agent"] = agent
+            page.run()
+            page.chat_input[0].set_value("把算法导论加入阅读清单")
+            page.run()
+            self.assertFalse(page.exception)
+            self.assertTrue(any(e.label == "阅读清单" for e in page.expander))
+            self.assertTrue(any("算法导论" in str(t.value) for t in page.table))
+            identifier = agent.conversation_id
+            agent.reset()
+            agent.load_conversation(identifier)
+            page.run()
+            self.assertFalse(page.exception)
+            self.assertEqual(agent.state_snapshot("reading_list")["payload"]["books"][0]["title"], "算法导论")
+            self.assertEqual(agent.state_snapshot("wall_design")["payload"]["parameters"], {})
+
     def test_streaming_preambles_rerender_without_duplicate_container_keys(self):
         class StreamingPageModel:
             count = 0
@@ -44,7 +68,7 @@ class WebUITests(unittest.TestCase):
                 self.count += 1
                 if self.count == 1:
                     text = "先读取技能说明。"
-                    calls = (ToolCall("r", "read_skill", '{"name":"retaining_wall"}'),)
+                    calls = (skill_call("r", "read_skill", '{"name":"retaining_wall"}'),)
                 else:
                     text, calls = "最终回答：可以继续核算。", ()
                 for start in range(0, len(text), 3):
@@ -53,7 +77,7 @@ class WebUITests(unittest.TestCase):
         temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
-            agent = DesignAgent(StreamingPageModel(), db_path=Path(directory) / "stream-ui.sqlite3")
+            agent = create_agent(StreamingPageModel(), db_path=Path(directory) / "stream-ui.sqlite3")
             page = AppTest.from_file(ROOT / "app.py", default_timeout=15)
             page.session_state["design_agent"] = agent
             page.run()
@@ -165,9 +189,9 @@ class WebUITests(unittest.TestCase):
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
             model = PageModel()
-            model.responses = deque([ModelResponse("先读取技能。\n\n核对参数。", (ToolCall("r", "read_skill", '{"name":"retaining_wall"}'),)),
+            model.responses = deque([ModelResponse("先读取技能。\n\n核对参数。", (skill_call("r", "read_skill", '{"name":"retaining_wall"}'),)),
                                      ModelResponse("**最终结论**：可以继续核算。")])
-            agent = DesignAgent(model, db_path=Path(directory) / "run-notes.sqlite3")
+            agent = create_agent(model, db_path=Path(directory) / "run-notes.sqlite3")
             agent.chat("请核对")
             page = AppTest.from_file(ROOT / "app.py", default_timeout=15)
             page.session_state["design_agent"] = agent
@@ -181,8 +205,8 @@ class WebUITests(unittest.TestCase):
         temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
-            agent = DesignAgent(PageModel(), max_rounds=1, db_path=Path(directory) / "limit.sqlite3")
-            agent.load_teaching_case("基础干燥填土")
+            agent = create_agent(PageModel(), max_rounds=1, db_path=Path(directory) / "limit.sqlite3")
+            business(agent).load_teaching_case("基础干燥填土")
             agent.chat("请计算")
             page = AppTest.from_file(ROOT / "app.py", default_timeout=15)
             page.session_state["design_agent"] = agent
@@ -195,7 +219,7 @@ class WebUITests(unittest.TestCase):
         temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
-            agent = DesignAgent(PageModel(), db_path=Path(directory) / "drafts.sqlite3")
+            agent = create_agent(PageModel(), db_path=Path(directory) / "drafts.sqlite3")
             page = AppTest.from_file(ROOT / "app.py", default_timeout=15)
             page.session_state["design_agent"] = agent
             page.run()
@@ -214,7 +238,7 @@ class WebUITests(unittest.TestCase):
             next(b for b in page.button if b.label == "从案例新建对话").click()
             page.run()
             self.assertFalse(page.exception)
-            self.assertTrue(agent.read_session().parameters)
+            self.assertTrue(business(agent).read_session().parameters)
             self.assertEqual(agent.all_conversations(), [])
 
     def test_model_and_reasoning_controls_update_the_application(self):
@@ -235,7 +259,7 @@ class WebUITests(unittest.TestCase):
         temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
-            agent = DesignAgent(SelectablePageModel(), db_path=Path(directory) / "models.sqlite3")
+            agent = create_agent(SelectablePageModel(), db_path=Path(directory) / "models.sqlite3")
             page = AppTest.from_file(ROOT / "app.py", default_timeout=15)
             page.session_state["design_agent"] = agent
             page.run()
@@ -255,7 +279,7 @@ class WebUITests(unittest.TestCase):
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
             model = type("HistoryModel", (), {"complete": lambda *args: ModelResponse("已记录。")})()
-            agent = DesignAgent(model, db_path=Path(directory) / "titles.sqlite3")
+            agent = create_agent(model, db_path=Path(directory) / "titles.sqlite3")
             for index in range(8):
                 if index:
                     agent.reset()
@@ -287,7 +311,7 @@ class WebUITests(unittest.TestCase):
         temp_root = ROOT / "tests/.runtime"
         temp_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temp_root) as directory:
-            agent = DesignAgent(PageModel(), db_path=Path(directory) / "page.sqlite3")
+            agent = create_agent(PageModel(), db_path=Path(directory) / "page.sqlite3")
             page = AppTest.from_file(ROOT / "app.py", default_timeout=15)
             page.session_state["design_agent"] = agent
 
@@ -303,37 +327,37 @@ class WebUITests(unittest.TestCase):
                 self.assertEqual(len(page.title), 1)
                 button("从案例新建对话").click()
                 run()
-                self.assertEqual(agent.read_session().parameters["height_m"], 4)
+                self.assertEqual(business(agent).read_session().parameters["height_m"], 4)
                 page.chat_input[0].set_value("请计算")
                 run()
-                self.assertEqual(agent.read_session().current_result["sliding_ratio"], 1.595)
+                self.assertEqual(business(agent).read_session().current_result["sliding_ratio"], 1.595)
                 self.assertEqual(len(page.get("download_button")), 2)
                 self.assertEqual([item.label for item in page.expander if item.label in {"计算书", "系统状态"}], ["计算书", "系统状态"])
                 page.chat_input[0].set_value("请比选")
                 run()
-                self.assertTrue(agent.read_session().pending_options)
+                self.assertTrue(business(agent).read_session().pending_options)
                 self.assertTrue(page.table)
                 page.chat_input[0].set_value("试试方案1")
                 run()
-                self.assertIsNone(agent.read_session().pending_options)
-                self.assertEqual(agent.read_session().current_result["input"], agent.read_session().parameters)
+                self.assertIsNone(business(agent).read_session().pending_options)
+                self.assertEqual(business(agent).read_session().current_result["input"], business(agent).read_session().parameters)
                 button("保存当前参数与结果").click()
                 run()
-                self.assertEqual(len(agent.saved_cases()), 1)
+                self.assertEqual(len(business(agent).saved_cases()), 1)
                 page.chat_input[0].set_value("墙高改为4.2")
                 run()
-                self.assertIsNone(agent.read_session().current_result)
+                self.assertIsNone(business(agent).read_session().current_result)
                 self.assertEqual(len(page.get("download_button")), 4)  # Two historical result cards.
                 self.assertFalse(any(item.label == "保存当前参数与结果" for item in page.button))
                 previous_id = agent.conversation_id
                 button("新建对话").click()
                 run()
                 self.assertEqual(page.session_state["messages"], [])
-                self.assertEqual(agent.read_session().parameters, {})
+                self.assertEqual(business(agent).read_session().parameters, {})
                 self.assertEqual(agent.catalog.loaded, set())
                 next(item for item in page.button if item.key == f"load_{previous_id}").click()
                 run()
-                self.assertEqual(agent.read_session().parameters["height_m"], 4.2)
+                self.assertEqual(business(agent).read_session().parameters["height_m"], 4.2)
                 self.assertEqual(len(page.get("download_button")), 4)
                 next(item for item in page.button if item.key == f"delete_{previous_id}").click()
                 run()

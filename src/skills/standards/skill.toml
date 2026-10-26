@@ -1,0 +1,8 @@
+id = "standards"
+protocol_version = 1
+entry = "runner.py"
+[imports.standards]
+owner = "wall_design"
+export = "standard_context"
+[actions.lookup_standard]
+label = "查询所选规范"

@@ -5,7 +5,20 @@ description: 收集或修改挡墙条件、检查参数、确定性计算、解�
 
 # 重力式挡土墙教学初算
 
-首次开展本业务先读取本说明。参数表由应用维护，使用工具返回的最新状态，不从旧聊天结果推断当前有效结果。
+首次开展本业务先读取本说明。参数表由挡墙业务包定义和校验，宿主保存并统一提交，使用工具返回的最新状态，不从旧聊天结果推断当前有效结果。
+
+## 脚本操作协议
+
+下文 `set_parameters` 等名称都是脚本的业务 action，不是独立模型工具。
+统一通过 `run_skill_action(skill_id="retaining_wall", action_id="操作名", input={本次参数})` 调用。
+例如 `run_skill_action("retaining_wall", "set_parameters", {"height_m":4,"base_width_m":2.4})`。
+需要计算时调用 `run_skill_action("retaining_wall", "calculate_design", {})`。
+不得在 input 中构造 snapshot、参数来源或修订号；宿主注入权威快照与本轮原文。
+缺项与业务失败不会提交变化。成功只表示已执行；界面另行提示尚未持久化的状态。
+`state.py` 定义完整设计状态、校验和失效规则；脚本可以独立运行：
+`python runner.py --action calculate_design < request.json`，输入格式见项目协议文档。
+当前支持业务数据版本 1，未知版本拒绝恢复；将来迁移由此包实现。
+规范技能读取本包导出的 StandardContextV1，不拥有设计参数或规范选择。
 
 ## 适用范围和参数
 
@@ -30,7 +43,7 @@ description: 收集或修改挡墙条件、检查参数、确定性计算、解�
 4. 解释时读取 get_current_result。所有工程数值、公式和已完成项目以工具证据为准；修改参数后旧结果和候选失效。
 5. 需要调整时调用 compare_designs。用户明确锁定底宽或顶宽时，放入 fixed_dimensions。候选不会修改当前方案。
 6. 用户同意后调用 apply_option，用返回候选的 index 选用并重算。用户只说“试一下”且未指定编号时用 1。无候选就说明搜索范围内无解，不编造候选。
-7. 可通过 list_cases 和 load_case 复用案例参数；载入不自动计算。保存仍由网页按钮完成，没有聊天保存工具。
+7. 可通过 list_cases 和 load_case 复用案例参数；载入不自动计算。网页通过 save_current 动作保存参数与结果；仅在用户明确要求保存案例时使用该动作，input 为 {"title":"案例名称"}。它是资源保存，不改变设计状态。
 
 ## 计算与比选边界
 

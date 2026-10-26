@@ -16,12 +16,14 @@ from urllib.error import HTTPError, URLError
 
 from src.agent.loop import AgentLoop
 from src.agent.tools import Tool, ToolRegistry, success
-from src.design_agent import DesignAgent
+from src.bootstrap import create_agent
+from support import business, business_artifacts, BusinessRegistry, skill_call, wire_action
 from src.config import ModelConfig, ProjectConfig
 from src.llm.deepseek import DeepSeekModel, provider_message
 from src.llm.protocol import Message, ModelError, ModelResponse, ToolCall
 from src.skills.retaining_wall.calculation import calculate_wall
-from src.skills.retaining_wall.cases import DEFAULT_DB, TEACHING_PRESETS, load_case
+from src.skills.retaining_wall.cases import TEACHING_PRESETS
+from src.config import DEFAULT_DATABASE as DEFAULT_DB
 from src.skills.retaining_wall.validation import check_parameters
 from src.skills.retaining_wall.variants import compare_base_widths, optimize_geometry
 
@@ -32,7 +34,7 @@ VALUES = dict(TEACHING_PRESETS[0][2])
 
 
 def call(name: str, args: dict | str | None = None, identifier: str = "call1") -> ToolCall:
-    return ToolCall(identifier, name, args if isinstance(args, str) else json.dumps(args or {}))
+    return skill_call(identifier, name, args if isinstance(args, str) else json.dumps(args or {}))
 
 
 class FakeModel:
@@ -77,8 +79,8 @@ class ApplicationTests(unittest.TestCase):
         temp_root.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(dir=temp_root)
         self.db = Path(self.temp.name) / "cases.sqlite3"
-        self.app = DesignAgent(FakeModel(), db_path=self.db)
-        self.registry = self.app.loop.registry
+        self.app = create_agent(FakeModel(), db_path=self.db)
+        self.registry = BusinessRegistry(self.app.loop.registry)
 
     def tearDown(self):
         self.assertTrue(Path(self.temp.name).resolve().is_relative_to((ROOT / "tests" / ".runtime").resolve()))
@@ -105,7 +107,7 @@ class ApplicationTests(unittest.TestCase):
         self.app.loop.model = fake
         outcome = self.app.chat("请计算用户给定参数")
         self.assertFalse(outcome.failed)
-        self.assertEqual(outcome.artifacts["result"]["sliding_ratio"], 1.595)
+        self.assertEqual(business_artifacts(self.app, outcome.artifacts)["result"]["sliding_ratio"], 1.595)
         body = self.app.catalog.entries["retaining_wall"].path.read_text(encoding="utf-8")
         first_messages, definitions = fake.requests[0]
         self.assertFalse(any(body in (m.content or "") for m in first_messages))
@@ -114,14 +116,14 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(skill_results[0]["data"]["content"], body)
         self.assertEqual([tools for _, tools in fake.requests], [definitions] * 3)
         self.assertEqual(self.app.catalog.loaded, {"retaining_wall"})
-        self.assertEqual(len(definitions), 10)
+        self.assertEqual(len(definitions), 4)
         self.assertIn("read_skill", [tool["function"]["name"] for tool in definitions])
-        self.assertIn("validate_parameters", [tool["function"]["name"] for tool in definitions])
-        for name in ["tool_started", "tool_finished", "message_completed", "design_updated", "artifact_created", "run_finished"]:
+        self.assertIn("run_skill_action", [tool["function"]["name"] for tool in definitions])
+        for name in ["tool_started", "tool_finished", "message_completed", "state_updated", "artifact_created", "run_finished"]:
             self.assertIn(name, [e.name for e in outcome.events])
-        exported = json.loads(outcome.artifacts["report"]["json"])
-        self.assertEqual(exported, outcome.artifacts["result"])
-        self.assertIn("逐项计算", outcome.artifacts["report"]["markdown"])
+        exported = json.loads(business_artifacts(self.app, outcome.artifacts)["report"]["json"])
+        self.assertEqual(exported, business_artifacts(self.app, outcome.artifacts)["result"])
+        self.assertIn("逐项计算", business_artifacts(self.app, outcome.artifacts)["report"]["markdown"])
 
     def test_context_stability_and_tool_pairs_across_turns(self):
         fake = FakeModel(
@@ -147,23 +149,23 @@ class ApplicationTests(unittest.TestCase):
                 paired = messages[i + 1:i + 1 + len(item.tool_calls)]
                 self.assertEqual([m.role for m in paired], ["tool"] * len(item.tool_calls))
                 self.assertEqual([m.tool_call_id for m in paired], [c.id for c in item.tool_calls])
-        self.assertEqual(self.app.read_session().parameters["height_m"], 4.2)
+        self.assertEqual(business(self.app).read_session().parameters["height_m"], 4.2)
 
     def test_parameter_invalidation_noop_and_compare_is_readonly(self):
         self.prepare()
-        before = self.app.read_session()
+        before = business(self.app).read_session()
         self.invoke("compare_designs", fixed_dimensions=["base_width_m"])
-        compared = self.app.read_session()
+        compared = business(self.app).read_session()
         self.assertEqual(compared.parameters, before.parameters)
         self.assertEqual(compared.current_result, before.current_result)
         self.assertIsNotNone(compared.pending_options)
         self.invoke("set_parameters", height_m=4)
-        self.assertEqual(self.app.read_session().current_result, before.current_result)
+        self.assertEqual(business(self.app).read_session().current_result, before.current_result)
         self.invoke("set_parameters", height_m=4.2)
-        after = self.app.read_session()
+        after = business(self.app).read_session()
         self.assertIsNone(after.current_result)
         self.assertIsNone(after.pending_options)
-        self.assertEqual(self.app.current_artifacts(), {})
+        self.assertEqual(business(self.app).current_artifacts(), {})
         self.assertEqual(self.registry.invoke("apply_option", {"index": 1})["error"]["code"], "INVALID_STATE")
         before.parameters["height_m"] = 100
         self.assertEqual(after.parameters["height_m"], 4.2)  # Snapshot cannot mutate authority.
@@ -179,7 +181,7 @@ class ApplicationTests(unittest.TestCase):
         outcome = self.app.chat("计算后修改墙高")
         self.assertFalse(outcome.failed)
         self.assertEqual(outcome.artifacts, {})
-        self.assertIsNone(self.app.read_session().current_result)
+        self.assertIsNone(business(self.app).read_session().current_result)
         self.assertEqual(len(outcome.trace), 4)
 
     def test_apply_updates_result_shape_and_contiguous_ids(self):
@@ -190,7 +192,7 @@ class ApplicationTests(unittest.TestCase):
             self.assertEqual(option["index"], index)
             self.assertTrue(option["label"].startswith(f"方案{index} · "))
         self.invoke("apply_option", index=1)
-        session = self.app.read_session()
+        session = business(self.app).read_session()
         self.assertEqual(session.current_result["input"], session.parameters)
         self.assertIsNone(session.pending_options)
         self.assertEqual(session.wall_shape, "trapezoid")
@@ -203,18 +205,20 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(len(options), 2)
         chosen = options[1]
         self.invoke("apply_option", index=2)
-        self.assertEqual(self.app.read_session().parameters["base_width_m"], chosen["base_width_m"])
+        self.assertEqual(business(self.app).read_session().parameters["base_width_m"], chosen["base_width_m"])
         self.assertTrue(chosen["label"].startswith("方案2 · "))
 
     def test_shared_validation_rejects_direct_compute(self):
-        for values in [{}, {**VALUES, "height_m": 6}, {**VALUES, "top_width_m": 3}]:
-            self.app.commit_parameters(values, {}, None, replace=True)
-            check = self.registry.invoke("validate_parameters", {})
-            calculation = self.registry.invoke("calculate_design", {})
-            self.assertFalse(check["ok"])
-            self.assertEqual(check["error"], calculation["error"])
-            self.assertIsNone(self.app.read_session().current_result)
-        self.assertEqual(self.registry.invoke("set_parameters", {"height_m": True})["error"]["code"], "INVALID_INPUT")
+        # Invalid changes are now rejected at the owning script boundary.
+        for values in [{"height_m": 6}, {"base_width_m": 2, "top_width_m": 3}, {"height_m": True}]:
+            before = self.app.state_snapshot("wall_design")
+            self.assertFalse(self.registry.invoke("set_parameters", values)["ok"])
+            self.assertEqual(self.app.state_snapshot("wall_design"), before)
+        check = self.registry.invoke("validate_parameters", {})
+        calculation = self.registry.invoke("calculate_design", {})
+        self.assertFalse(check["ok"])
+        self.assertEqual(check["error"], calculation["error"])
+        self.assertIsNone(business(self.app).read_session().current_result)
 
     def test_case_database_compatibility_and_load_invalidation(self):
         self.assertEqual(DEFAULT_DB, ROOT / "data/cases.sqlite3")
@@ -223,17 +227,17 @@ class ApplicationTests(unittest.TestCase):
             db.execute("CREATE TABLE cases(id INTEGER PRIMARY KEY AUTOINCREMENT,created_at TEXT NOT NULL,title TEXT NOT NULL,values_json TEXT NOT NULL,result_json TEXT NOT NULL)")
             db.execute("INSERT INTO cases(created_at,title,values_json,result_json) VALUES(?,?,?,?)",
                        ("2026-10-24T00:00:00", "原有案例", json.dumps(VALUES), json.dumps(FIXTURES[0]["result"])))
-        self.app.load_saved_case(1)
-        self.assertEqual(self.app.read_session().parameters, VALUES)
-        self.assertIsNone(self.app.read_session().current_result)
+        business(self.app).load_saved_case(1)
+        self.assertEqual(business(self.app).read_session().parameters, VALUES)
+        self.assertIsNone(business(self.app).read_session().current_result)
         self.invoke("calculate_design")
-        identifier = self.app.save_case("新案例")
+        identifier = business(self.app).save_case("新案例")
         self.assertGreater(identifier, 1)
-        self.assertEqual(load_case(identifier, self.db)["result"], self.app.read_session().current_result)
+        self.assertEqual(next(d for d in business(self.app).saved_cases() if d["id"] == identifier)["result"], business(self.app).read_session().current_result)
         self.invoke("compare_designs", fixed_dimensions=["base_width_m"])
-        self.app.load_saved_case(1)
-        self.assertIsNone(self.app.read_session().current_result)
-        self.assertIsNone(self.app.read_session().pending_options)
+        business(self.app).load_saved_case(1)
+        self.assertIsNone(business(self.app).read_session().current_result)
+        self.assertIsNone(business(self.app).read_session().pending_options)
 
     def test_reset_clears_history_and_loaded_skills(self):
         self.invoke("read_skill", name="standards")
@@ -242,7 +246,7 @@ class ApplicationTests(unittest.TestCase):
         self.app.reset()
         self.assertEqual(self.app.loop.history, [])
         self.assertEqual(self.app.catalog.loaded, set())
-        self.assertEqual(self.app.read_session().parameters, {})
+        self.assertEqual(business(self.app).read_session().parameters, {})
 
     def test_model_failure_retains_completed_tools_and_emits_failure(self):
         self.app.loop.model = FakeModel(
@@ -252,7 +256,7 @@ class ApplicationTests(unittest.TestCase):
         )
         outcome = self.app.chat("保存")
         self.assertTrue(outcome.failed)
-        self.assertEqual(self.app.read_session().parameters, VALUES)
+        self.assertEqual(business(self.app).read_session().parameters, VALUES)
         self.assertEqual(outcome.events[-1].name, "run_failed")
         self.assertFalse(self.app.chat("继续").failed)
 

@@ -5,7 +5,7 @@ description: 需要查询所选规范的本地摘要、规范索引及已覆盖�
 
 # 标准摘要查询示例
 
-首次查询标准前读取本说明，使用 lookup_standard(keyword) 查询侧栏选定标准。
+首次查询标准前读取本说明，使用 `run_skill_action("standards", "lookup_standard", {"keyword":"11.2"})` 查询侧栏选定标准。
 
 - 只迁移原有 GB 50330-2013 少量条文摘要，以及 GB 55003-2021、GB 50007-2011 的元数据和覆盖说明。
 - GB 50330 的摘要按字符串匹配；无匹配时会回退显示全部已有摘要，不代表精确命中。
@@ -14,3 +14,6 @@ description: 需要查询所选规范的本地摘要、规范索引及已覆盖�
 - 所选规范进入本次核算要求：对已实现的 GB 50330 抗滑、抗倾覆项目引用工具给出的校核状态；未覆盖的承载力、变形等要求必须列为待补充、待验算。
 - 所选规范不切换未经实现的公式，不免除实际工程中的规范适用要求，不将教学对照表述为全面合规。
 - 工程数字及已完成的教学对照来自计算结果；其他项目仍待补充资料和验算。
+
+脚本为普通 Python：`python runner.py --action lookup_standard < request.json`。
+输入 shared.standards 是宿主按清单注入的 StandardContextV1（version、selected、catalog、entries、requirements）。本技能只读该投影，不导入挡墙实现，不写设计状态。

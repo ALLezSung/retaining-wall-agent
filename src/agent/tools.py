@@ -1,14 +1,16 @@
 """Stable tool registration, runtime schema checks and uniform results."""
 from __future__ import annotations
 
-import json
+from contextvars import ContextVar
 from copy import deepcopy
 from dataclasses import dataclass
 from math import isfinite
 from typing import Any, Callable
+from .serialization import loads
 
 
 ERROR_CODES = {"MISSING_INPUT", "INVALID_INPUT", "INVALID_STATE", "EXECUTION_FAILED"}
+RUN_CONTEXT = ContextVar("run_context", default={})
 
 
 class ToolError(ValueError):
@@ -90,8 +92,8 @@ class ToolRegistry:
             if name not in self._tools:
                 raise ToolError("INVALID_INPUT", "没有这个工具。")
             try:
-                arguments = json.loads(arguments) if isinstance(arguments, str) else arguments
-            except (json.JSONDecodeError, ValueError):
+                arguments = loads(arguments) if isinstance(arguments, str) else arguments
+            except ValueError:
                 raise ToolError("INVALID_INPUT", "工具参数必须是有效 JSON 对象。")
             tool = self._tools[name]
             check_schema(arguments, tool.schema)

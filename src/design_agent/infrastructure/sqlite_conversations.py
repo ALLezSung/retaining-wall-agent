@@ -6,13 +6,12 @@ import sqlite3
 from contextlib import contextmanager, closing
 from datetime import datetime, timezone
 from pathlib import Path
+from ...agent.serialization import loads
+from ..errors import ConversationStorageError, ConversationConflict
+from ..ports import ConversationStore
 
 
-class ConversationStorageError(RuntimeError):
-    pass
-
-
-class SQLiteConversationStore:
+class SQLiteConversationStore(ConversationStore):
     def __init__(self, path: Path):
         self.path = Path(path)
 
@@ -29,8 +28,16 @@ class SQLiteConversationStore:
             raise ConversationStorageError("对话数据库读写失败，请检查存储路径和文件权限。") from exc
 
     def save(self, identifier: str, title: str, created_at: str, payload: dict) -> None:
+        payload = dict(payload)
+        expected = payload.pop("expected_revision", None)
         serialized = json.dumps({"version": 1, **payload}, ensure_ascii=False, allow_nan=False)
         with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            old = db.execute("SELECT payload_json FROM conversations WHERE id=?", (identifier,)).fetchone()
+            if payload.get("version") == 2:
+                current = loads(old[0]).get("storage_revision", "legacy") if old else None
+                if current != expected:
+                    raise ConversationConflict("对话已由另一实例更新或删除，未覆盖数据库记录。")
             db.execute("""INSERT INTO conversations VALUES(?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET title=excluded.title,
                 updated_at=excluded.updated_at, payload_json=excluded.payload_json""",
@@ -55,8 +62,8 @@ class SQLiteConversationStore:
         if row is None:
             raise ValueError("该对话已删除或不存在。")
         try:
-            payload = json.loads(row[2])
-            if payload.get("version") != 1:
+            payload = loads(row[2])
+            if type(payload.get("version")) is not int or payload["version"] not in {1, 2}:
                 raise ValueError("unknown version")
         except (ValueError, AttributeError, TypeError) as exc:
             raise ValueError("对话记录格式不兼容，无法载入。") from exc

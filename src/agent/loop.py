@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from ..llm.protocol import Message, Model, ModelDelta, ModelError
 from .events import Event, EventSink
-from .tools import ToolRegistry
+from .tools import ToolRegistry, RUN_CONTEXT
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,7 @@ class RunResult:
 class AgentLoop:
     def __init__(self, model: Model, registry: ToolRegistry, system_prompt: str,
                  context_builder: Callable[[], dict], event_sink: EventSink | None = None,
-                 max_rounds: int = 6):
+                 max_rounds: int = 6, checkpoint: Callable[[], None] | None = None):
         if max_rounds < 1:
             raise ValueError("max_rounds must be positive")
         self.model = model
@@ -33,6 +33,7 @@ class AgentLoop:
         self.event_sink = event_sink or (lambda event: None)
         self.max_rounds = max_rounds
         self.history: list[Message] = []
+        self.checkpoint = checkpoint
 
     def reset(self) -> None:
         self.history.clear()
@@ -98,7 +99,12 @@ class AgentLoop:
                     for call in response.tool_calls:
                         tool_started = monotonic()
                         emit("tool_started", tool=call.name, call_id=call.id, arguments=call.arguments)
-                        output = self.registry.invoke(call.name, call.arguments)
+                        token = RUN_CONTEXT.set({"run_id": run_id, "run": round_number, "call_id": call.id,
+                                                 "user_text": text, "source": "model"})
+                        try:
+                            output = self.registry.invoke(call.name, call.arguments)
+                        finally:
+                            RUN_CONTEXT.reset(token)
                         item = {"run_id": run_id, "run": round_number, "call_id": call.id,
                                 "tool": call.name, "arguments": call.arguments, "output": output,
                                 "duration_seconds": round(monotonic() - tool_started, 3)}
@@ -107,6 +113,8 @@ class AgentLoop:
                         messages.append(tool_message)
                         self.history.append(tool_message)
                         emit("tool_finished", **item)
+                    if self.checkpoint:
+                        self.checkpoint()
                     continue
                 if not isinstance(response.content, str) or not response.content.strip():
                     raise ModelError("模型没有返回可显示的回答，请重试。")

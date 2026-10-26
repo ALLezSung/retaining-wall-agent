@@ -1,0 +1,15 @@
+id = "reading_list"
+protocol_version = 1
+entry = "runner.py"
+owner = "reading_list"
+[lifecycle]
+initialize = "initialize"
+restore = "restore"
+project = "project"
+reset = "reset"
+[actions.add]
+label = "添加书目"
+[actions.mark_read]
+label = "标记已读"
+[actions.show]
+label = "展示阅读清单"
