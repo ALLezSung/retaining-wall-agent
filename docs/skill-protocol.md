@@ -2,6 +2,8 @@
 
 协议与业务数据版本独立。模型只能提供 action 的 input；snapshot、shared、resources、runtime 由宿主注入。下面每个示例均给出完整结构；机器可读版本在 tests/fixtures/protocol_examples.json，并由自动测试校验。
 
+技能目录改为 SKILL.md、scripts、references 与可选 integrations 的组织形式，不改变此 JSON 协议。宿主从 SKILL.md 的 metadata.design-agent-integration 获取集成声明，入口相对技能根目录解析。运行 skill_id 和状态 owner 是稳定标识，可以与标准目录/name 不同；例如 reading-list 目录仍使用 reading_list 运行 id。声明格式见 [技能编写指南](skill-authoring.md)。
+
 ## 请求
 
 一次执行的会话、所有者和基准修订由 snapshot 决定，不接收模型提供的权威快照。runtime.staging_dir 是宿主创建的本次输出目录，响应中的附件路径必须在此目录内。

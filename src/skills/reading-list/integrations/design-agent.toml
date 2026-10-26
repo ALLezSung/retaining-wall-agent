@@ -1,6 +1,6 @@
 id = "reading_list"
 protocol_version = 1
-entry = "runner.py"
+entry = "scripts/runner.py"
 owner = "reading_list"
 [lifecycle]
 initialize = "initialize"

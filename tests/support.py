@@ -4,8 +4,14 @@ Old behavioral tests keep their numeric expectations; these helpers construct
 the new wire calls and inspect business-owned evidence through public APIs.
 """
 import json
+from pathlib import Path
+import sys
 from types import SimpleNamespace
 from src.llm.protocol import ToolCall
+
+# Tests may import the standalone business package; production hosts never do.
+WALL_SCRIPTS = Path(__file__).resolve().parents[1] / "src/skills/retaining-wall/scripts"
+sys.path.insert(0, str(WALL_SCRIPTS))
 
 WALL_ACTIONS = {"set_parameters", "validate_parameters", "calculate_design", "compare_designs", "apply_option", "get_current_result", "list_cases", "load_case", "load_saved", "save_current", "select_standards"}
 

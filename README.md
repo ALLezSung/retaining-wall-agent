@@ -97,6 +97,7 @@ high = "high"
 
 - 通用模型工具只有四项：read_skill、read_skill_resource、run_skill_action、read_artifact。挡墙的 set_parameters、calculate_design 等是脚本 action，不再注册为独立模型工具。
 - 技能目录由 skills.directories 配置，支持纯说明和脚本型技能；启动时稳定发现，不热加载。
+- 技能以 SKILL.md 为根入口，代码放 scripts，较长说明放 references；本应用的可选执行契约由 metadata 指向 integrations/design-agent.toml，不是 Agent Skills 标准必需文件。示例见 src/skills/reading-list，挡墙业务见 src/skills/retaining-wall；原运行 id 和状态所有者不变。
 - wall_design 唯一拥有完整挡墙状态；规范技能只读其 StandardContextV1 投影。阅读清单示例拥有独立类型模型，可以在同一聊天使用。
 - 业务脚本仅使用 JSON 协议，不导入 Agent、界面、宿主配置或存储。原确定性算法和几何搜索保持不变。
 - 通用界面读取业务描述中的选项、动作、章节和表格，通过成果类型渲染；模型与思考配置仍由宿主管理。

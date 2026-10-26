@@ -1,3 +1,16 @@
+# 技能目录组织与可选宿主集成（2026-10-26）
+
+- 内置技能目录改为 retaining-wall、reading-list、standards。根入口统一为 SKILL.md，普通脚本放 scripts；挡墙内部实现放 scripts/wall_design，较长动作、参数和计算边界说明放 references；没有内容就不创建 assets 等空目录。
+- 原 skill.toml 移到 integrations/design-agent.toml，由 SKILL.md 的 metadata.design-agent-integration 显式指向。该声明是本项目的可选宿主扩展，非 Agent Skills 标准要求。新入口相对技能根目录解析，进程工作目录不变。
+- YAML 元数据改用 PyYAML SafeLoader，支持嵌套 metadata、引号和多行说明，拒绝重复键、对象构造和别名。新增依赖 PyYAML >=6,<7，已安装到项目虚拟环境。
+- name 使用与目录一致的标准连字符名称，中文展示名放 metadata.design-agent-display-name。运行 id retaining_wall、reading_list、standards，状态 owner wall_design、reading_list，资源命名空间和 JSON 协议版本均保持不变；本机配置、数据库和成果目录无需迁移。
+- 继续读取旧根 skill.toml 和旧中文 name。旧清单未声明 id 时仍回退到目录名；新旧声明同时存在则拒绝，避免两份执行契约产生歧义。新标准技能没有应用集成文件时仍可发现、读取，其脚本不会被宿主猜测执行。
+- 旧 src.skills.retaining_wall.* Python 导入路径移除；宿主通过 JSON 协议执行，算法测试从独立脚本的 wall_design 包导入。10 个内部业务模块内容与迁移前完全一致（忽略换行编码），未修改算法、公式或失效规则。
+
+验证：完整 96 项离线测试通过，包含原 12 项界面测试和新增 7 项布局测试。覆盖 YAML 校验、多行元数据、说明型技能、集成路径/链接越界、缺失入口、新旧声明冲突、旧布局保存后迁入新目录继续操作，以及复制挡墙 scripts 到项目外生成计算书。现有全部 6 条会话在隔离数据库与工作区副本中成功恢复并保存重载，核验 16 个历史附件；原两份数据库校验值未变。编译和差异检查通过。本轮没有调用真实模型，也没有重新运行浏览器视觉测试。
+
+详细布局和迁移步骤见 [技能编写指南](skill-authoring.md)。后续各节保留此前实施记录。
+
 # 应用宿主归属与依赖倒置（2026-10-26）
 
 本节描述当前目录，后续各节保留当时的迁移记录。详细接口与依赖图见 [architecture.md](architecture.md)。

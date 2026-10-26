@@ -10,10 +10,11 @@ import unittest
 from src.config import ProjectConfig, SkillsConfig, StorageConfig
 from src.bootstrap import create_agent
 from src.llm.protocol import ModelResponse
-from src.skills.retaining_wall.calculation import calculate_wall
-from src.skills.retaining_wall.cases import TEACHING_PRESETS
-from src.skills.retaining_wall.standards_policy import selected_standard_report
-from src.skills.retaining_wall.variants import optimize_geometry
+from support import WALL_SCRIPTS
+from wall_design.calculation import calculate_wall
+from wall_design.cases import TEACHING_PRESETS
+from wall_design.standards_policy import selected_standard_report
+from wall_design.variants import optimize_geometry
 
 ROOT = Path(__file__).resolve().parents[1]
 

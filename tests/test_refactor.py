@@ -21,11 +21,11 @@ from support import business, business_artifacts, BusinessRegistry, skill_call, 
 from src.config import ModelConfig, ProjectConfig
 from src.llm.deepseek import DeepSeekModel, provider_message
 from src.llm.protocol import Message, ModelError, ModelResponse, ToolCall
-from src.skills.retaining_wall.calculation import calculate_wall
-from src.skills.retaining_wall.cases import TEACHING_PRESETS
+from wall_design.calculation import calculate_wall
+from wall_design.cases import TEACHING_PRESETS
 from src.config import DEFAULT_DATABASE as DEFAULT_DB
-from src.skills.retaining_wall.validation import check_parameters
-from src.skills.retaining_wall.variants import compare_base_widths, optimize_geometry
+from wall_design.validation import check_parameters
+from wall_design.variants import compare_base_widths, optimize_geometry
 
 
 ROOT = Path(__file__).resolve().parents[1]

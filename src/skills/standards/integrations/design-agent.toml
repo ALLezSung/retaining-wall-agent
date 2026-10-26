@@ -1,6 +1,6 @@
 id = "standards"
 protocol_version = 1
-entry = "runner.py"
+entry = "scripts/runner.py"
 [imports.standards]
 owner = "wall_design"
 export = "standard_context"

@@ -9,6 +9,7 @@ from ..errors import CapabilityError
 from ..ports import SkillCatalog
 from ..skills.catalog import SkillEntry
 from .paths import contained
+from .skill_metadata import read_metadata
 
 
 class LocalSkillCatalog(SkillCatalog):
@@ -26,21 +27,25 @@ class LocalSkillCatalog(SkillCatalog):
                 paths.add(path.resolve())
         found = {}
         for path in sorted(paths):
-            lines = path.read_text(encoding="utf-8").splitlines()
-            if not lines or lines[0] != "---" or "---" not in lines[1:]:
-                raise ValueError(f"缺少技能元数据：{path}")
-            metadata = dict(line.split(":", 1) for line in lines[1:lines.index("---", 1)] if ":" in line)
-            metadata = {k.strip(): v.strip() for k, v in metadata.items()}
-            if not all(metadata.get(k) for k in ("name", "description")):
-                raise ValueError(f"技能名称或说明缺失：{path}")
-            config = path.with_name("skill.toml")
+            legacy = path.with_name("skill.toml")
+            metadata = read_metadata(path, legacy_name=legacy.is_file())
+            extensions = metadata.get("metadata", {})
+            integration = extensions.get("design-agent-integration")
+            if integration is not None and legacy.exists():
+                raise ValueError(f"技能同时声明新旧集成文件，请移除旧 skill.toml：{path}")
+            try:
+                config = contained(path.parent, integration) if integration is not None else contained(path.parent, "skill.toml")
+            except CapabilityError as exc:
+                raise ValueError(f"技能集成文件路径无效：{path}") from exc
+            if integration is not None and not config.is_file():
+                raise ValueError(f"技能声明的集成文件不存在：{config}")
             manifest = tomllib.loads(config.read_text(encoding="utf-8")) if config.exists() else {}
-            identifier = manifest.get("id", path.parent.name)
-            if not isinstance(identifier, str) or not re.fullmatch(r"[a-z][a-z0-9_-]*", identifier):
+            identifier = manifest.get("id", path.parent.name if legacy.is_file() else metadata["name"])
+            if not isinstance(identifier, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", identifier):
                 raise ValueError(f"无效技能标识：{path}")
             if identifier in found:
                 raise ValueError(f"重复技能标识 {identifier}：{found[identifier].path} / {path}")
-            if manifest and (manifest.get("protocol_version") != 1 or not isinstance(manifest.get("actions", {}), dict)):
+            if (integration is not None or manifest) and (manifest.get("protocol_version") != 1 or not isinstance(manifest.get("actions", {}), dict)):
                 raise ValueError(f"不支持的技能清单：{config}")
             unavailable = ""
             if manifest:
@@ -54,7 +59,10 @@ class LocalSkillCatalog(SkillCatalog):
                         raise ValueError(f"无效动作 {name}：{config}")
                 if manifest.get("owner") and not all(manifest.get("lifecycle", {}).get(k) for k in ("initialize", "restore", "project", "reset")):
                     raise ValueError(f"状态所有者缺少生命周期：{config}")
-            found[identifier] = SkillEntry(identifier, metadata["name"], metadata["description"], path, manifest, unavailable)
+            display_name = extensions.get("design-agent-display-name", metadata["name"])
+            if not display_name.strip():
+                raise ValueError(f"技能展示名不能为空：{path}")
+            found[identifier] = SkillEntry(identifier, display_name, metadata["description"], path, manifest, unavailable)
         self.entries = dict(sorted(found.items()))
         for entry in self.entries.values():
             owner = entry.manifest.get("owner")

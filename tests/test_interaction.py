@@ -19,8 +19,8 @@ from support import business, business_artifacts, BusinessRegistry, skill_call, 
 from src.llm.compatible import OpenAICompatibleModel
 from src.llm.protocol import Message, ModelDelta, ModelError, ModelResponse, ToolCall
 from src.design_agent.infrastructure.sqlite_conversations import SQLiteConversationStore
-from src.skills.retaining_wall.cases import TEACHING_PRESETS
-from src.skills.retaining_wall.calculation import calculate_wall
+from wall_design.cases import TEACHING_PRESETS
+from wall_design.calculation import calculate_wall
 
 ROOT = Path(__file__).resolve().parents[1]
 

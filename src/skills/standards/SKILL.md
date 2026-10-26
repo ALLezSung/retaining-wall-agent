@@ -1,6 +1,9 @@
 ---
-name: 标准摘要查询示例
+name: standards
 description: 需要查询所选规范的本地摘要、规范索引及已覆盖和未覆盖项目时使用。
+metadata:
+  design-agent-display-name: "标准摘要查询示例"
+  design-agent-integration: "integrations/design-agent.toml"
 ---
 
 # 标准摘要查询示例
@@ -15,5 +18,5 @@ description: 需要查询所选规范的本地摘要、规范索引及已覆盖�
 - 所选规范不切换未经实现的公式，不免除实际工程中的规范适用要求，不将教学对照表述为全面合规。
 - 工程数字及已完成的教学对照来自计算结果；其他项目仍待补充资料和验算。
 
-脚本为普通 Python：`python runner.py --action lookup_standard < request.json`。
+脚本为普通 Python：`python scripts/runner.py --action lookup_standard < request.json`。
 输入 shared.standards 是宿主按清单注入的 StandardContextV1（version、selected、catalog、entries、requirements）。本技能只读该投影，不导入挡墙实现，不写设计状态。

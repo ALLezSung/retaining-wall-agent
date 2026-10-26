@@ -1,6 +1,6 @@
 id = "retaining_wall"
 protocol_version = 1
-entry = "runner.py"
+entry = "scripts/runner.py"
 owner = "wall_design"
 resource_namespace = "wall_cases"
 legacy_tables = ["cases", "teaching_presets"]

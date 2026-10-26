@@ -30,7 +30,7 @@ from src.design_agent.workspace.service import Workspace
 from src.design_agent.infrastructure.files import LocalArtifactStore
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = ROOT / "src/skills/reading_list"
+EXAMPLE = ROOT / "src/skills/reading-list"
 
 
 class OfflineModel:
@@ -53,7 +53,7 @@ class SkillProtocolTests(unittest.TestCase):
                                     skills=SkillsConfig((self.skills,), self.root / "workspace", "reading_list", "reading_list"))
 
     def install_example(self):
-        shutil.copytree(EXAMPLE, self.skills / "reading_list", ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(EXAMPLE, self.skills / "reading-list", ignore=shutil.ignore_patterns("__pycache__"))
 
     def app(self, *responses):
         return create_agent(OfflineModel(*responses), config=self.config)
@@ -88,7 +88,7 @@ class SkillProtocolTests(unittest.TestCase):
         app = self.app()
         request = {"protocol_version": 1, "request_id": "standalone", "skill_id": "reading_list", "action_id": "add", "input": {"title": "独立运行"},
                    "runtime": {}, "snapshot": app.state_snapshot("reading_list"), "shared": {}, "resources": {}}
-        result = subprocess.run([sys.executable, "-X", "utf8", str(EXAMPLE / "runner.py"), "--action", "add"], input=json.dumps(request),
+        result = subprocess.run([sys.executable, "-X", "utf8", str(EXAMPLE / "scripts/runner.py"), "--action", "add"], input=json.dumps(request),
                                 text=True, encoding="utf-8", capture_output=True, cwd=self.root, timeout=10, env={"SYSTEMROOT": os.environ.get("SYSTEMROOT", ""), "PYTHONUTF8": "1"})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(response(loads(result.stdout), request)["state_proposal"]["payload"]["books"][0]["title"], "独立运行")
@@ -100,7 +100,7 @@ class SkillProtocolTests(unittest.TestCase):
     def test_documentation_missing_entry_duplicate_ids_and_paths(self):
         notes = self.skills / "notes"
         notes.mkdir()
-        (notes / "SKILL.md").write_text("---\nname: Notes\ndescription: Instructions only\n---\nBody", encoding="utf-8")
+        (notes / "SKILL.md").write_text("---\nname: notes\ndescription: Instructions only\n---\nBody", encoding="utf-8")
         (notes / "ref.txt").write_text("参考资料", encoding="utf-8")
         app = self.app()
         self.assertTrue(app.capabilities.read_skill("notes")["ok"])
@@ -121,7 +121,7 @@ class SkillProtocolTests(unittest.TestCase):
 
     def fault_app(self):
         self.install_example()
-        path = self.skills / "reading_list/runner.py"
+        path = self.skills / "reading-list/scripts/runner.py"
         source = path.read_text(encoding="utf-8")
         source = source.replace('    print(json.dumps(handle(r), ensure_ascii=False, allow_nan=False))', '''    if r["action_id"] == "fault":
         import time
@@ -148,7 +148,7 @@ class SkillProtocolTests(unittest.TestCase):
     else:
         print(json.dumps(handle(r), ensure_ascii=False, allow_nan=False))''')
         path.write_text(source, encoding="utf-8")
-        manifest = self.skills / "reading_list/skill.toml"
+        manifest = self.skills / "reading-list/integrations/design-agent.toml"
         manifest.write_text(manifest.read_text() + '\n[actions.fault]\nlabel="Fault"\n[limits]\ntimeout_seconds=0.5\n', encoding="utf-8")
         app = self.app()
         self.assertTrue(self.invoke(app, "add", {"title": "历史成果"})["ok"])
@@ -303,6 +303,12 @@ class DependencyBoundaryTests(unittest.TestCase):
                 elif isinstance(node, ast.ImportFrom):
                     base = resolve_name("." * node.level + (node.module or ""), parent) if node.level else (node.module or "")
                     targets = [base, *[base + "." + alias.name for alias in node.names]]
+                # Standalone scripts import their own sibling package by its
+                # ordinary Python name, outside the host's src package.
+                parts = path.relative_to(ROOT).parts
+                if "scripts" in parts and parts[:2] == ("src", "skills"):
+                    script_root = ".".join(parts[:parts.index("scripts") + 1])
+                    targets += [script_root + "." + target for target in targets]
                 graph[name].update(target for target in targets if target in modules and target != name)
         done, active = set(), []
 

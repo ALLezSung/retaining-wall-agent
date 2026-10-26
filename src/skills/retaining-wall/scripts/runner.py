@@ -3,15 +3,11 @@ import json
 from pathlib import Path
 import sys
 
-if not __package__:
-    __package__ = Path(__file__).parent.name
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from .state import WallState, BusinessError, success
-from .tools import WallOperations, result_evidence
-from .models import FIELD_LABELS
-from .report import summary_markdown, calculation_markdown, standards_markdown, book_sections
-from .standards_policy import STANDARDS, STANDARD_ENTRIES, selected_standard_report
+from wall_design.state import WallState, BusinessError, success
+from wall_design.tools import WallOperations, result_evidence
+from wall_design.models import FIELD_LABELS
+from wall_design.report import summary_markdown, calculation_markdown, standards_markdown, book_sections
+from wall_design.standards_policy import STANDARDS, STANDARD_ENTRIES, selected_standard_report
 
 
 def projection(state, operations):

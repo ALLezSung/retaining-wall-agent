@@ -15,7 +15,10 @@ src/
     skills/                  技能元数据、协议与调用编排
     workspace/               状态外壳、成果与提交规则
     infrastructure/          目录、子进程、SQLite 和文件适配器
-  skills/                    挡墙、规范和阅读清单业务脚本
+  skills/
+    retaining-wall/          SKILL.md、scripts/wall_design、references、integrations
+    reading-list/            SKILL.md、scripts、integrations
+    standards/               SKILL.md、scripts、integrations
   webui/                     通用动作与成果展示
   bootstrap.py               本地实现选择和依赖注入
 ```
@@ -55,6 +58,10 @@ agent = create_agent()  # 读取配置，装配本地实现
 测试使用五类纯内存实现，显式禁止 pathlib 文件操作、subprocess.Popen 和 sqlite3.connect，仍能完成聊天、提交、成果下载、保存、载入、资源操作及失败重试。递归静态检查保证内核不依赖应用、应用策略不依赖适配器，生产模块依赖图无环。
 
 技能目录只按声明发现，Python 业务实现从不导入宿主进程。业务脚本不能依赖 Agent、UI、宿主配置或存储，技能之间也不能通过实现导入共享状态。
+
+SKILL.md 使用标准 YAML 前置元数据：name 与目录名一致，中文展示名使用 metadata.design-agent-display-name。本应用通过 metadata.design-agent-integration 读取可选的 integrations/design-agent.toml，它声明动作、生命周期及状态归属，是项目扩展。入口相对技能根目录解析，不相对 TOML 所在目录。旧根 skill.toml 仍可读取，新旧声明同时存在则拒绝。
+
+目录/name 的 retaining-wall、reading-list 与保留的运行 id retaining_wall、reading_list 分开；旧会话、默认技能配置、状态 owner 和成果引用不受布局变化影响。业务脚本是独立文件应用，不再作为 src.skills.retaining_wall 模块被导入；内部 wall_design 包从脚本所在目录加载，业务算法不变。完整布局及编写示例见 skill-authoring.md。
 
 ## 谁理解状态，谁提交状态
 
